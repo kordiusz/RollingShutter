@@ -10,7 +10,11 @@ Model dostaje po jednej klatce z każdej kamery i zwraca klatkę kamery A bez zn
 
 ```
 src/                 kod (generator, dataset, modele, trening, inferencja); opis techniczny: src/README.md
-  synth_rs.py        generator danych syntetycznych
+  synth_rs.py        generator danych syntetycznych (zdjęcia + ruch kamery)
+  synth_video.py     generator z nagrań 1000 fps (ruch kamery i obiektów)
+  raft_geom.py       RAFT + geometria RS (korekcja ruchu obiektów)
+  train_raft.py      ewaluacja / dostrajanie RAFT + geometria
+  demo_real.py       demo na parze zdjęć z kamer (np. wiatrak)
   rs_dataset.py      Dataset PyTorch (wejścia, wzorzec, pola przesunięć, maski)
   model.py           MotionNet (etap 1), RefinePipeline = MotionNet + U-Net (etap 2), U-Net porównawczy
   train.py           trening i ewaluacja (zapisuje run_info.json, results.json, eval.json)
@@ -21,7 +25,8 @@ configs/             parametry generatora (kamery, zakresy ruchu)
 notebooks/           notatniki Colab, numerowane w kolejności użycia
   01_dataset.ipynb       generowanie zbioru -> Drive
   02_motionnet.ipynb     etap 1 (wytrenowany 13.10), ewaluacja / ponowny trening
-  03_refine_unet.ipynb   etap 2 (U-Net doszlifowujący)  <- AKTUALNY
+  03_refine_unet.ipynb   etap 2 (U-Net doszlifowujący)
+  04_raft_geom.ipynb     RAFT + geometria: ewaluacja, dostrajanie, demo wiatraka  <- AKTUALNY
   archiwum/              stare notatniki (do odtworzenia historii)
 experiments/README.md  REJESTR wszystkich treningów: co, kiedy, na czym, wyniki, gdzie wagi
 docs/                karta tematu, plan spotkań, rysunki do pracy; literatura (PDF-y tylko lokalnie)
@@ -31,7 +36,8 @@ Duże pliki **nie są w gicie**: zbiory, wagi (`*.pt`) i wyniki są na Google Dr
 
 ```
 MyDrive/rs_project/
-  datasets/rs_dataset_256.zip (+ _config.json)    zbiory
+  datasets/rs_dataset_256.zip, rs_video_x4k.zip   zbiory
+  real/wiatrak/kamera_A.jpg, kamera_B.jpg          zdjęcia z kamer do demo
   runs/<RRRR-MM-DD>_<nazwa>/                       jeden folder na trening: best.pt, last.pt,
                                                    log.csv, run_info.json (komenda, commit kodu, GPU,
                                                    parametry zbioru), results.json, eval.json, podglądy

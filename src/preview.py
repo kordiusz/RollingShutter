@@ -31,7 +31,10 @@ def main():
         k = meta.get("b_rot_k", 1)
         ra, rb, ga = (cv2.imread(str(d / f"{n}.png"), cv2.IMREAD_COLOR) for n in ("rs_a", "rs_b", "gs_a"))
         rb_back = np.ascontiguousarray(np.rot90(rb, -k))
-        info = f"pan {np.hypot(*meta['w_rad_s'][:2]):.1f}rad/s ro {meta['readout_a_s']*1e3:.0f}ms"
+        if meta.get("kind") == "video":
+            info = f"video ro {meta['readout_a_s']*1e3:.0f}ms base {meta['baseline_px']:.1f}px"
+        else:
+            info = f"pan {np.hypot(*meta['w_rad_s'][:2]):.1f}rad/s ro {meta['readout_a_s']*1e3:.0f}ms"
         sep = np.full((ra.shape[0], 4, 3), 255, np.uint8)
         rows.append(np.hstack([label(ra, "RS A"), sep, label(rb, "RS B (camera)"), sep,
                                label(rb_back, "RS B rotated back"), sep,

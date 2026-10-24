@@ -64,8 +64,12 @@ def find_run(name, file="best.pt"):
 def status():
     """Print what is available on Drive."""
     ensure_dirs()
-    z = find_dataset_zip()
-    print("dataset zip :", f"{z} ({z.stat().st_size / 1e9:.2f} GB)" if z else "BRAK - uruchom 01_dataset.ipynb")
+    zips = sorted(DATASETS.glob("*.zip")) + sorted(MYDRIVE.glob("rs_dataset*.zip"))
+    print("zbiory danych:")
+    for z in zips:
+        print(f"  {z}  ({z.stat().st_size / 1e9:.2f} GB)")
+    if not zips:
+        print("  BRAK - uruchom 01_dataset.ipynb")
     runs = sorted(p for p in RUNS.iterdir() if p.is_dir())
     print(f"runs ({RUNS}):")
     for r in runs:
