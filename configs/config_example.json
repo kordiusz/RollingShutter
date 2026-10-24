@@ -1,0 +1,14 @@
+{
+  "fov_deg": [45, 55],
+  "readout_ms": [18, 22],
+  "b_readout_scale": 1.0,
+  "b_rot_k": 1,
+  "sync_offset_ms": [-1.0, 1.0],
+  "max_pan_px": 30,
+  "max_roll_px": 8,
+  "max_trans_px": 3,
+  "baseline_px": [0, 8],
+  "exposure_ms": [0, 4],
+  "noise_std": [0.0, 0.015],
+  "gray": false
+}

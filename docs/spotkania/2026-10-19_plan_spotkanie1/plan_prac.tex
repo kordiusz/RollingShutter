@@ -1,0 +1,76 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{enumitem}
+\usepackage{booktabs,tabularx,array}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\IK}{\textsuperscript{\textbf{[IK]}}}
+\newcommand{\HW}{\textsuperscript{\textbf{[HW]}}}
+\newcommand{\WS}{\textsuperscript{\textbf{[wsp.]}}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\setlist{itemsep=0pt,topsep=2pt}
+\pagestyle{empty}
+
+\begin{document}
+
+\section*{Plan prac}
+
+Termin zakończenia: koniec listopada 2026. Plan jest podzielony na etapy, a~nie
+na sztywne zadania. Daty są orientacyjne i~będą aktualizowane po każdym spotkaniu.
+
+\subsection*{Stan na start (październik)}
+\begin{itemize}
+  \item wstępny przegląd literatury \WS
+  \item pierwsza wersja generatora danych syntetycznych \IK
+  \item środowisko treningowe i~pierwsze modele, wstępne porównanie na danych syntetycznych \IK
+  \item kompletowanie sprzętu i~koncepcja stanowiska \HW
+\end{itemize}
+
+\subsection*{Etapy}
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.0cm}YY}
+\toprule
+\textbf{Etap} & \textbf{Zadania} & \textbf{Rezultat} \\
+\midrule
+\textbf{1. Rozwój metody}\newline\footnotesize ok.\ 20.10--1.11 &
+  \IK{} rozbudowa generatora, kolejne warianty modeli i~eksperymenty\newline
+  \HW{} budowa stanowiska, oprogramowanie akwizycji\newline
+  \WS{} szkielet pracy, rozdziały teoretyczne &
+  działające stanowisko; wybrane kierunki rozwoju modelu \\
+\addlinespace
+\textbf{2. Dane rzeczywiste}\newline\footnotesize ok.\ 2--15.11 &
+  \HW{} kalibracja, pomiary parametrów kamer, nagranie zbioru rzeczywistego\newline
+  \IK{} dopasowanie generatora do zmierzonych parametrów, trening wybranych modeli\newline
+  \WS{} opis generatora i~stanowiska &
+  zbiór rzeczywisty; modele gotowe do ewaluacji \\
+\addlinespace
+\textbf{3. Ewaluacja}\newline\footnotesize ok.\ 16--22.11 &
+  \WS{} testy na danych syntetycznych i~rzeczywistych, porównanie modeli, wnioski\newline
+  \WS{} rozdziały z~wynikami &
+  komplet wyników; wersja robocza pracy \\
+\addlinespace
+\textbf{4. Redakcja}\newline\footnotesize ok.\ 23--30.11 &
+  \WS{} poprawki po uwagach opiekuna, uzupełnienia, finalizacja &
+  praca gotowa do oddania \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection*{Zasady}
+\begin{itemize}
+  \item Spotkania kontrolne z~opiekunem po każdym etapie (lub częściej, w~razie potrzeby).
+  \item Pisanie pracy przebiega równolegle z~pracami od pierwszego etapu.
+  \item Najważniejsza zależność między częściami to parametry kamer zmierzone na stanowisku.
+        Generator i~modele są przez nie dostrajane, więc pomiary mają priorytet w~etapie~2.
+  \item Rezerwa czasowa jest w~etapach 3--4. Gdy coś się opóźni, ograniczamy liczbę wariantów
+        modeli, a~nie ewaluację na danych rzeczywistych.
+\end{itemize}
+
+\end{document}

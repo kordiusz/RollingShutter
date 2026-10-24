@@ -1,0 +1,82 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{enumitem}
+
+% oznaczenia autorstwa: [IK] Igor Kosakowski, [HW] współautor (sprzęt), [wsp.] wspólne
+\newcommand{\IK}{\textsuperscript{\textbf{[IK]}}}
+\newcommand{\HW}{\textsuperscript{\textbf{[HW]}}}
+\newcommand{\WS}{\textsuperscript{\textbf{[wsp.]}}}
+
+% lista numerowana 1. / 1.1.
+\newlist{toc}{enumerate}{2}
+\setlist[toc,1]{label=\textbf{\arabic*.},leftmargin=2em,itemsep=6pt}
+\setlist[toc,2]{label=\arabic{toci}.\arabic*.,leftmargin=2.4em,itemsep=0pt,topsep=2pt}
+
+\setlength{\parindent}{0pt}
+\pagestyle{empty}
+
+\begin{document}
+
+\section*{Proponowany spis treści}
+
+\begin{toc}
+\item \textbf{Wstęp} \WS
+  \begin{toc}
+    \item Motywacja
+    \item Cel i zakres pracy
+    \item Podział pracy między autorów
+  \end{toc}
+
+\item \textbf{Podstawy teoretyczne} \WS
+  \begin{toc}
+    \item Zjawisko \emph{rolling shutter}
+    \item Model kamery i geometria obrazowania
+    \item Uczenie maszynowe w przetwarzaniu obrazu
+  \end{toc}
+
+\item \textbf{Przegląd literatury} \WS
+  \begin{toc}
+    \item Metody korekcji efektu \emph{rolling shutter}
+    \item Zbiory danych
+  \end{toc}
+
+\item \textbf{Stanowisko pomiarowe i dane rzeczywiste} \HW
+  \begin{toc}
+    \item Konstrukcja stanowiska i akwizycja obrazu
+    \item Kalibracja i synchronizacja kamer
+    \item Zbiór danych rzeczywistych
+  \end{toc}
+
+\item \textbf{Generowanie danych syntetycznych} \IK
+  \begin{toc}
+    \item Założenia i model zjawiska
+    \item Algorytm generowania danych
+    \item Opis wygenerowanych zbiorów
+  \end{toc}
+
+\item \textbf{Trening i porównanie modeli} \IK
+  \begin{toc}
+    \item Rozważane architektury
+    \item Proces trenowania
+    \item Napotkane problemy i wprowadzone usprawnienia
+  \end{toc}
+
+\item \textbf{Ewaluacja i wyniki} \WS
+  \begin{toc}
+    \item Metodyka i metryki oceny
+    \item Wyniki na danych syntetycznych
+    \item Wyniki na danych rzeczywistych
+    \item Dyskusja
+  \end{toc}
+
+\item \textbf{Podsumowanie i kierunki dalszych prac} \WS
+
+\item[] \textbf{Bibliografia}
+\item[] \textbf{Dodatki}
+\end{toc}
+
+\end{document}

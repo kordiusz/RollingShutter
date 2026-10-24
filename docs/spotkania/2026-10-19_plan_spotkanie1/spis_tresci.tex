@@ -1,0 +1,137 @@
+% ===========================================================================
+%  Proponowany spis treści (8 rozdziałów) -- fragment do wklejenia w Overleaf
+%  Wymaga w preambule: \usepackage{enumitem}
+%  Oznaczenia: [IK] = Igor Kosakowski, [HW] = współautor (sprzęt), [wsp.] = wspólne
+% ===========================================================================
+\newcommand{\IK}{\textsuperscript{\textbf{[IK]}}}
+\newcommand{\HW}{\textsuperscript{\textbf{[HW]}}}
+\newcommand{\WS}{\textsuperscript{\textbf{[wsp.]}}}
+
+\newlist{toc}{enumerate}{3}
+\setlist[toc,1]{label=\textbf{\arabic*.},leftmargin=2.2em,itemsep=5pt}
+\setlist[toc,2]{label=\arabic{toci}.\arabic*.,leftmargin=2.6em,itemsep=1pt}
+\setlist[toc,3]{label=\arabic{toci}.\arabic{tocii}.\arabic*.,leftmargin=3.2em,itemsep=0pt}
+
+\begin{toc}
+\item \textbf{Wstęp} \WS
+  \begin{toc}
+    \item Motywacja: zjawisko RS w~kamerach CMOS i~jego skutki
+    \item Cel i~zakres pracy, pytania badawcze
+    \item Koncepcja dwóch prostopadłych kamer
+    \item Podział pracy między autorów
+    \item Układ pracy
+  \end{toc}
+
+\item \textbf{Podstawy teoretyczne} \WS
+  \begin{toc}
+    \item Model kamery otworkowej, parametry wewnętrzne, zniekształcenia obiektywu \HW
+    \item Przetworniki CMOS: migawka szczelinowa a~globalna, czas odczytu, ekspozycja \HW
+    \item Matematyczny model zniekształceń RS: poza kamery jako funkcja czasu odczytu wiersza;
+          rodzaje zniekształceń (skew, wobble, rozciąganie) \IK
+    \item Geometria dwóch kamer: baza, paralaksa, rektyfikacja; przypadek kamery obróconej o~$90^\circ$ \WS
+    \item Sieci splotowe w~estymacji ruchu i~rekonstrukcji obrazu: U-Net, warstwa korelacji,
+          różniczkowalne przekształcanie obrazu (\emph{warping}) \IK
+  \end{toc}
+
+\item \textbf{Przegląd literatury} \WS
+  \begin{toc}
+    \item Metody klasyczne: modele ruchu, korekcja z~użyciem żyroskopu
+    \item Uczenie głębokie, jedna klatka
+    \item Uczenie głębokie, wiele klatek
+    \item Układy z~dwiema kamerami / dwoma kierunkami odczytu
+    \item Zbiory danych dla korekcji RS (syntetyczne i~rzeczywiste) i~sposoby ich tworzenia
+    \item Podsumowanie: luka, którą wypełnia praca
+  \end{toc}
+
+\item \textbf{Generowanie danych syntetycznych} \IK
+  \begin{toc}
+    \item Wymagania wobec danych: zgodność ze stanowiskiem, dokładne \emph{ground truth}, skala
+    \item Przegląd podejść: obrazy statyczne + model ruchu, wideo o~dużej liczbie klatek
+          z~interpolacją, renderowanie 3D; uzasadnienie wyboru
+    \item Model sceny i~ruchu
+      \begin{toc}
+        \item Scena płaska, parametryzacja ruchu ($\boldsymbol\omega$, $\boldsymbol\alpha$, $\mathbf v$) w~pikselach przesunięcia
+        \item Czas odczytu piksela dla kamery A (wiersze) i~B (kolumny), przesunięcie synchronizacji
+        \item Baza stereo i~obrót kamery B
+      \end{toc}
+    \item Algorytm renderowania obrazów RS i~GS (odwzorowanie wsteczne, margines, odrzucanie próbek)
+    \item \emph{Ground truth}: obraz GS, pole przemieszczeń (iteracja punktu stałego), maska widoczności, korespondencje
+    \item Model fotometryczny: wzmocnienie, szum, rozmycie ruchu w~czasie ekspozycji
+    \item Generator v2: niezależnie poruszające się obiekty (warstwy), zbiory statyczny i~dynamiczny
+    \item Dopasowanie parametrów do rzeczywistych kamer (dane z~rozdz.~6)
+    \item Opis zbiorów: źródła (DIV2K, zdjęcia z~własnych kamer), liczność, podział, format
+    \item Weryfikacja poprawności generatora (szachownica testowa, kontrola wizualna, test odwracalności)
+    \item Ograniczenia: płaska scena, równoległe osie optyczne, brak zniekształceń obiektywu
+  \end{toc}
+
+\item \textbf{Modele korekcji i~ich trenowanie} \IK
+  \begin{toc}
+    \item Sformułowanie zadania: wejście (RS A, RS B obrócony), wyjście (GS A), co jest znane ($f$)
+    \item Architektury
+      \begin{toc}
+        \item MotionNet: ekstraktor syjamski, warstwa korelacji, regresja 9 parametrów ruchu,
+              różniczkowalna geometria RS
+        \item Wariant jednokamerowy (ablacja kamery B)
+        \item Gęsty przepływ (U-Net) bez geometrii, z~korelacją i~bez niej
+        \item Model hybrydowy: MotionNet (ruch globalny) + U-Net (korekty lokalne dla A i~B,
+              estymacja przesunięcia B, maska fuzji, residuum obrazu)
+      \end{toc}
+    \item Funkcje straty: MSE na polu przemieszczeń, maskowane L1 na obrazie, wagi
+    \item Proces trenowania: generowanie danych, augmentacja, optymalizator, harmonogram,
+          obcinanie gradientu, środowisko (Colab T4), trening dwuetapowy (MotionNet zamrożony)
+    \item Problemy napotkane w~trakcie i~ich rozwiązania: ,,martwe'' ReLU w~głowicy regresji,
+          L1 zatrzymujące sieć na zerowym ruchu, nieobserwowalny FOV (predykcja w~pikselach),
+          brak uczenia przy wczesnej fuzji bez korelacji
+    \item Inferencja dla par rzeczywistych: obrót, wspólny kwadratowy wycinek, skalowanie,
+          usunięcie zniekształceń obiektywu
+  \end{toc}
+
+\item \textbf{Stanowisko pomiarowe i~zbiór danych rzeczywistych} \HW
+  \begin{toc}
+    \item Wymagania wobec stanowiska (wynikające z~modelu i~generatora)
+    \item Dobór kamer: przetwornik, tryby pracy, interfejs USB/UVC, sterowanie ekspozycją
+    \item Konstrukcja uchwytu: montaż prostopadły, baza ok.\ 3\,cm, sztywność
+    \item Oprogramowanie akwizycji: równoczesny zapis z~dwóch kamer, znaczniki czasu, stałe
+          ustawienia (ekspozycja, wzmocnienie, balans bieli)
+    \item Charakterystyka czasowa
+      \begin{toc}
+        \item Pomiar czasu odczytu matrycy (migająca dioda LED / obracający się wentylator)
+        \item Pomiar przesunięcia czasowego między kamerami i~jego zmienności
+        \item Synchronizacja: możliwości sprzętowe i~programowe, ograniczenia
+      \end{toc}
+    \item Kalibracja: parametry wewnętrzne i~zniekształcenia, kalibracja
+          stereo, rektyfikacja, wyznaczenie kierunku obrotu kamery B
+    \item Zbiór danych rzeczywistych
+      \begin{toc}
+        \item Scenariusze: ruch ręczny, wibracje, panoramowanie, sceny z~obiektami ruchomymi
+        \item \emph{Ground truth}: ujęcia statyczne, płaskie plansze (szachownica + homografia)
+        \item Organizacja, format i~opis zbioru
+      \end{toc}
+    \item Parametry przekazane do generatora i~porównanie ich z~założeniami symulacji
+  \end{toc}
+
+\item \textbf{Eksperymenty i~wyniki} \WS
+  \begin{toc}
+    \item Metodyka: metryki (maskowane PSNR, SSIM, EPE, czas inferencji), punkt
+          odniesienia ,,brak korekcji'', protokół testów
+    \item Wyniki na danych syntetycznych: porównanie architektur \IK
+    \item Ablacje: wpływ kamery B, warstwy korelacji, geometrii; odporność na błędy czasu
+          odczytu, przesunięcia czasowego i~bazy \IK
+    \item Wyniki na danych rzeczywistych i~analiza sim-to-real \WS
+    \item Czas inferencji i~możliwość pracy w~czasie rzeczywistym \WS
+    \item Porównanie z~metodami z~literatury \WS
+    \item Dyskusja wyników i~ograniczeń
+  \end{toc}
+
+\item \textbf{Podsumowanie} \WS
+  \begin{toc}
+    \item Odpowiedzi na pytania badawcze i~osiągnięte cele
+    \item Wkład każdego z~autorów
+    \item Kierunki dalszych prac: scena z~głębią, synchronizacja sprzętowa, sekwencje wideo
+          (spójność czasowa), uruchomienie na urządzeniu wbudowanym
+  \end{toc}
+
+\item[] \textbf{Bibliografia}
+\item[] \textbf{Dodatki:} A.~Instrukcja uruchomienia (generator, trening, inferencja) \IK;
+        B.~Rysunki techniczne uchwytu i~procedura kalibracji \HW; C.~Opis struktury zbiorów danych \WS
+\end{toc}

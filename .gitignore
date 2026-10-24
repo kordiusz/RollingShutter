@@ -1,0 +1,22 @@
+# Dane, wagi i wyniki są na Google Drive (MyDrive/rs_project), nie w gicie
+dataset/
+dataset_*/
+data/
+runs/
+results/
+*.pt
+*.pth
+*.zip
+
+# Literatura: PDF-y wydawców tylko lokalnie (prawa autorskie)
+docs/literatura/*.pdf
+
+# Python / notatniki / edytory / sekrety
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.github_token
+
+# stare kopie sprzed porządków (24.10) - do przejrzenia i usunięcia
+_stare_do_usuniecia/

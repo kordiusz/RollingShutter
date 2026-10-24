@@ -1,0 +1,467 @@
+% ============================================================================
+%  Plan pracy inżynierskiej – materiał na spotkanie nr 1 z opiekunem
+%  Overleaf: Menu -> Compiler: pdfLaTeX. Wgraj cały folder (main.tex + img/).
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}}{}
+\IfFileExists{polish.ldf}{\usepackage[polish]{babel}}{\usepackage[english]{babel}}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,tabularx,array,multirow}
+\usepackage{enumitem}
+\usepackage{needspace}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[most]{tcolorbox}
+\usepackage[hidelinks]{hyperref}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+% ---------------------------------------------------------------------------
+%  Dane do uzupełnienia
+% ---------------------------------------------------------------------------
+\newcommand{\autorA}{Igor Kosakowski}
+\newcommand{\autorB}{[Imię] Mach}          % <- uzupełnić
+\newcommand{\opiekun}{dr inż. Jarosław Bułat}
+\newcommand{\dataSpotkania}{\today}
+
+% ---------------------------------------------------------------------------
+%  Oznaczenia autorstwa rozdziałów i punktów do dyskusji
+% ---------------------------------------------------------------------------
+\definecolor{ikcol}{HTML}{1F5FAD}
+\definecolor{hwcol}{HTML}{2E7D32}
+\definecolor{wscol}{HTML}{6A6A6A}
+\definecolor{dyskcol}{HTML}{C25E00}
+\newcommand{\tagbox}[2]{\tikz[baseline=(t.base)]\node[fill=#1,text=white,rounded corners=1.5pt,inner sep=1.6pt,font=\sffamily\scriptsize\bfseries](t){#2};}
+\newcommand{\IK}{\tagbox{ikcol}{IK}}
+\newcommand{\HW}{\tagbox{hwcol}{HW}}
+\newcommand{\WS}{\tagbox{wscol}{wsp.}}
+\newcommand{\dysk}[1]{\par\noindent{\color{dyskcol}\small\textsf{\textbf{? do dyskusji:}} \emph{#1}}\par}
+
+\newtcolorbox{ramka}[1][]{colback=gray!5,colframe=gray!45,boxrule=0.5pt,arc=2pt,
+  left=6pt,right=6pt,top=4pt,bottom=4pt,#1}
+
+% listy spisu treści
+\newlist{toc}{enumerate}{3}
+\setlist[toc,1]{label=\textbf{\arabic*.},leftmargin=2.2em,itemsep=5pt}
+\setlist[toc,2]{label=\arabic{toci}.\arabic*.,leftmargin=2.6em,itemsep=1pt}
+\setlist[toc,3]{label=\arabic{toci}.\arabic{tocii}.\arabic*.,leftmargin=3.2em,itemsep=0pt}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+
+% ===========================================================================
+\begin{document}
+
+\begin{center}
+  {\small Akademia Górniczo-Hutnicza im.\ St.\ Staszica w Krakowie \textbullet{} Instytut Telekomunikacji}\\[10pt]
+  {\LARGE\bfseries Kompensacja efektu \textit{rolling shutter}\\[3pt] w sekwencjach wideo z~wykorzystaniem\\[3pt] metod uczenia maszynowego}\\[8pt]
+  {\large Cel pracy, plan realizacji i proponowany spis treści}\\[8pt]
+  {\normalsize \autorA{} \IK \quad\textbullet\quad \autorB{} \HW}\\[2pt]
+  {\small Opiekun: \opiekun \quad\textbullet\quad Spotkanie nr 1, \dataSpotkania}
+\end{center}
+
+\vspace{4pt}
+\begin{ramka}
+\small\textbf{Oznaczenia.} \IK{} -- część \autorA{} (dane syntetyczne, modele, trening);
+\HW{} -- część \autorB{} (stanowisko sprzętowe, kalibracja, dane rzeczywiste);
+\WS{} -- rozdział wspólny. {\color{dyskcol}\textsf{\textbf{? do dyskusji}}} -- punkt, który
+chcemy ustalić na spotkaniu.
+\end{ramka}
+
+% ===========================================================================
+\section{Cel pracy}
+
+\subsection{Problem}
+Większość kamer z~matrycą CMOS (kamery internetowe, smartfony, kamery sportowe) używa
+migawki szczelinowej (\emph{rolling shutter}, RS): wiersze matrycy są eksponowane
+i~odczytywane kolejno, z~opóźnieniem rzędu $10$--$33$\,ms między pierwszym a~ostatnim wierszem.
+Jeżeli kamera lub scena porusza się w~trakcie odczytu, każdy wiersz obrazu pochodzi
+z~innej chwili i~z~innej pozy kamery. Powstają zniekształcenia geometryczne: pochylenie
+(\emph{skew}), rozciąganie/ściskanie i~falowanie (\emph{wobble}). Utrudniają one m.in.\
+pomiary wizyjne, rekonstrukcję 3D, stabilizację i~detekcję obiektów. Kamery z~migawką
+globalną (\emph{global shutter}, GS), które eksponują wszystkie piksele jednocześnie, są
+wyraźnie droższe.
+
+Korekcja RS z~jednej klatki jest zadaniem źle postawionym: ten sam obraz może wynikać
+z~różnych kombinacji ruchu i~struktury sceny~\cite{zhuang2019,rengarajan2017}.
+
+\subsection{Idea: dwie kamery ustawione prostopadle}
+Stanowisko składa się z~dwóch kamer RS zamontowanych obok siebie na wspólnym uchwycie,
+przy czym kamera~B jest obrócona o~$90^\circ$ względem osi optycznej. W~układzie
+współrzędnych kamery~A kamera~B odczytuje więc \emph{kolumny} zamiast wierszy. Ten sam ruch
+zniekształca oba obrazy w~kierunkach komplementarnych (rys.~\ref{fig:preview}): to, co
+w~A jest rozmyte w~czasie wzdłuż osi pionowej, w~B jest rozłożone wzdłuż osi poziomej.
+Ta dodatkowa informacja ma pozwolić sieci jednoznacznie odtworzyć ruch w~czasie odczytu
+i~zrekonstruować obraz GS. Pokrewne podejścia dwukamerowe/dwuodczytowe to
+\cite{albl2020} (przeciwne kierunki odczytu, baza ok.\ 3\,cm) i~\cite{zhong2022}.
+
+\begin{figure}[h]
+  \centering
+  \IfFileExists{img/preview.png}{\includegraphics[width=0.92\linewidth]{img/preview.png}}{\fbox{\parbox{0.8\linewidth}{\centering brak pliku img/preview.png}}}
+  \caption{Próbki z~generatora (szachownica testowa). Kolumny: obraz RS kamery~A, obraz RS
+  kamery~B (tak jak zwraca go kamera), B obrócony do orientacji A, docelowy obraz GS kamery~A.
+  Zniekształcenia w~A i~w~B mają różne kierunki.}
+  \label{fig:preview}
+\end{figure}
+
+\subsection{Cel główny i~cele szczegółowe}
+\textbf{Cel główny:} opracowanie, implementacja i~ewaluacja modelu uczenia maszynowego,
+który na podstawie pary obrazów RS z~dwóch prostopadle ustawionych kamer odtwarza
+niezniekształcony obraz GS kamery~A, wraz z~danymi potrzebnymi do jego trenowania i~testowania.
+
+Cele szczegółowe (zgodnie z~kartą tematu):
+\begin{enumerate}[itemsep=1pt]
+  \item Przegląd literatury: metody korekcji RS (klasyczne i~uczenia głębokiego) oraz
+        architektury CNN do estymacji ruchu i~rekonstrukcji obrazu. \WS
+  \item Algorytm generowania syntetycznych par RS z~dokładnym \emph{ground truth}
+        (obraz GS, pole przemieszczeń, parametry ruchu). \IK
+  \item Stanowisko z~dwiema prostopadłymi kamerami: budowa, kalibracja, pomiar czasu
+        odczytu i~przesunięcia czasowego, rejestracja zbioru rzeczywistego. \HW
+  \item Projekt, implementacja i~trening kilku architektur (regresja ruchu + geometria,
+        gęsty przepływ, model hybrydowy) i~ich porównanie. \IK
+  \item Ewaluacja na danych syntetycznych i~rzeczywistych: PSNR, SSIM, błąd pola
+        przemieszczeń (EPE), czas inferencji. \WS
+\end{enumerate}
+
+\subsection{Pytania badawcze}
+\begin{enumerate}[label=\textbf{P\arabic*.},itemsep=1pt]
+  \item Na ile druga, obrócona kamera poprawia jakość korekcji względem jednej kamery?
+  \item Czy model z~jawną geometrią RS (regresja parametrów ruchu) jest lepszy od sieci
+        przewidującej gęsty przepływ bez geometrii?
+  \item Jak duża jest luka między danymi syntetycznymi a~rzeczywistymi (\emph{sim-to-real})
+        i~które uproszczenia generatora odpowiadają za nią najbardziej?
+  \item Czy czas inferencji pozwala na przetwarzanie wideo w~czasie zbliżonym do rzeczywistego?
+\end{enumerate}
+
+% ===========================================================================
+\section{Podział pracy}
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.2cm}YY}
+\toprule
+ & \textbf{\autorA{} \IK} & \textbf{\autorB{} \HW} \\
+\midrule
+Dane & generator syntetyczny, zbiory treningowe/walidacyjne, dopasowanie parametrów symulacji do kamer &
+       zbiór rzeczywisty z~\emph{ground truth}, protokół nagrań \\
+Sprzęt & -- & uchwyt, akwizycja z~dwóch kamer, synchronizacja, kalibracja \\
+Model & architektury, funkcje straty, trening, ablacje & -- (ew.\ demo na żywo, patrz pkt~\ref{sec:dysk}) \\
+Ewaluacja & \multicolumn{2}{p{0.62\linewidth}}{wspólnie: metryki, wyniki na danych rzeczywistych, wnioski} \\
+Interfejs między częściami & \multicolumn{2}{p{0.62\linewidth}}{\HW{} dostarcza zmierzone: czas odczytu,
+       ogniskową $f$, FOV, bazę, przesunięcie czasowe, kierunek obrotu B; \IK{} wpisuje je do
+       konfiguracji generatora i~dostarcza skrypt inferencji dla par rzeczywistych.} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ===========================================================================
+\section{Stan prac}
+
+\subsection{Generator danych syntetycznych (wersja 1)}
+Ostre zdjęcie (DIV2K~\cite{div2k}) traktujemy jako widok GS płaskiej sceny w~odległości $Z=1$.
+Losujemy ruch zestawu kamer w~czasie odczytu: prędkość kątową $\boldsymbol\omega$,
+przyspieszenie kątowe $\boldsymbol\alpha$ i~prędkość liniową $\mathbf v$. Pozę w~chwili $t$
+(liczonej od środka odczytu kamery~A) opisują
+\begin{equation}
+  R(t)=\exp\!\big([\boldsymbol\omega t+\tfrac12\boldsymbol\alpha t^2]_\times\big),\qquad
+  \mathbf c(t)=\mathbf v\,t .
+\end{equation}
+Każdy piksel ma znany czas odczytu: dla A wynika on z~numeru wiersza, dla B z~numeru kolumny
+(w~układzie A), z~dodatkowym przesunięciem synchronizacji $\Delta t$:
+\begin{equation}
+  t_A(x,y)=\Big(\tfrac{y}{S-1}-\tfrac12\Big)T_r,\qquad
+  t_B(x,y)=\Delta t+\Big(\tfrac{r_B(x,y)}{S-1}-\tfrac12\Big)T_r .
+\end{equation}
+Dla każdego piksela wyznaczamy promień w~pozie z~chwili jego odczytu, przecinamy go
+z~płaszczyzną sceny i~odczytujemy kolor ze zdjęcia źródłowego. Jest to jedno odwzorowanie
+wsteczne (\texttt{cv2.remap}) na obraz, więc nie powstają dziury, a~\emph{ground truth}
+jest dokładne. Ruch losujemy w~\emph{pikselach przesunięcia w~czasie odczytu}
+(np.\ do 30\,px panoramowania), co ułatwia dobór zakresów do kamer.
+
+\begin{algorithm}[h]
+\caption{Generowanie jednej próbki (skrót)}
+\small
+\begin{algorithmic}[1]
+\State wylosuj wycinek $P\times P$ ze zdjęcia (z~marginesem), losowe odbicie
+\State wylosuj FOV $\Rightarrow f$, czas odczytu $T_r$, $\Delta t$, bazę $b$, ruch $(\boldsymbol\omega,\boldsymbol\alpha,\mathbf v)$
+\For{kamera $k\in\{A,B\}$}
+  \State $T_k \gets$ mapa czasów odczytu (wiersze dla A, kolumny dla B)
+  \State dla każdego piksela: promień $K^{-1}\mathbf p$ $\to$ obrót $R(T_k)$, środek $\mathbf c(T_k)$ (+ baza dla B) $\to$ przecięcie z~$Z=1$
+  \State $I^{RS}_k \gets \texttt{remap}(\text{wycinek}, m_x, m_y)$ \Comment{opcjonalnie: rozmycie ekspozycją}
+\EndFor
+\State jeśli mapy wychodzą poza margines -- wylosuj ruch ponownie
+\State $I^{GS}_A \gets$ render dla $t\equiv 0$; \;fotometria: wzmocnienie, szum (osobno dla A i~B)
+\State zapisz $I^{RS}_A$, $\mathrm{rot90}(I^{RS}_B)$, $I^{GS}_A$, $I^{GS}_B$, \texttt{meta.json}, (opc.) korespondencje
+\end{algorithmic}
+\end{algorithm}
+
+Pole przemieszczeń GS$\to$RS (potrzebne do nadzoru sieci) liczymy z~parametrów w~\texttt{meta.json}
+iteracją punktu stałego (wiersz $\to$ czas $\to$ poza $\to$ rzut $\to$ nowy wiersz) na rzadkiej
+siatce, interpolowaną splajnem. Podział train/val jest wykonywany według obrazu źródłowego.
+
+\subsection{Modele i~pierwsze wyniki}
+Główny model, \textbf{MotionNet}: wspólny (syjamski) ekstraktor cech dla A i~B (B obrócony
+do orientacji A), warstwa korelacji (\emph{cost volume}, $\pm24$\,px, jak w~\cite{flownet,pwcnet}),
+CNN regresujący 9 parametrów ruchu w~pikselach (dzielonych przez znane $f$), a~następnie
+różniczkowalna geometria RS, która daje pole przemieszczeń i~przekształca obraz A
+(idea Velocity-Net z~\cite{zhuang2019} rozszerzona na dwie kamery).
+Strata: MSE na polu przemieszczeń + maskowane L1 na obrazie.
+
+\begin{center}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Model & PSNR [dB] & SSIM & EPE [px] & ms/klatkę & param.\ [M] \\
+\midrule
+brak korekcji (wejście) & 19.66 & 0.527 & -- & -- & -- \\
+\rowcolor{ikcol!8} MotionNet, A+B (\texttt{motion\_dual}) & \textbf{28.51} & \textbf{0.874} & \textbf{0.57} & 18.4 & 3.58 \\
+MotionNet, tylko A (\texttt{motion\_single}) & 19.90 & 0.544 & 3.98 & 6.6 & 3.48 \\
+U-Net, gęsty przepływ, A+B (\texttt{flow\_dual}) & 20.45 & 0.588 & 3.15 & 18.3 & 2.72 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Syntetyczny zbiór walidacyjny DIV2K, $256\times256$, 30 epok, Google Colab (T4).}
+\end{center}
+
+Wstępny wniosek: kamera B jest kluczowa (+8.9\,dB z~B wobec +0.2\,dB bez B przy tej samej
+architekturze). Zastrzeżenia: walidacja pochodzi z~tego samego generatora (scena płaska, tylko
+ruch kamery), a~\texttt{flow\_dual} nie ma warstwy korelacji, więc porównanie
+,,geometria vs.\ brak geometrii'' nie jest jeszcze rozstrzygające. Test na danych rzeczywistych
+jeszcze się nie odbył.
+
+% ===========================================================================
+\section{Plan pracy i~harmonogram}
+
+Termin oddania: ok.\ koniec listopada 2026 (ok.\ 6~tygodni). Pisanie zaczynamy równolegle
+z~pracami od pierwszego tygodnia.
+
+\begin{center}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{1.7cm}>{\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{4.7cm}>{\raggedright\arraybackslash}p{3.4cm}}
+\toprule
+Tydzień & \IK{} dane i~modele & \HW{} sprzęt i~dane rzeczywiste & \WS{} tekst \\
+\midrule
+19--25.10 & generator v2: obiekty ruchome (warstwy jak FlyingChairs~\cite{flownet}); zbiory statyczny i~dynamiczny &
+            montaż uchwytu, skrypt równoczesnej akwizycji ze znacznikami czasu, stałe ustawienia ekspozycji &
+            szkielet pracy w~Overleaf, bibliografia \\
+26.10--1.11 & model hybrydowy (MotionNet + U-Net korekcji lokalnej + maska fuzji); \texttt{flow\_dual} z~korelacją &
+              kalibracja wewnętrzna i~stereo, pomiar czasu odczytu i~przesunięcia czasowego &
+              rozdz.\ 2--3 (teoria, literatura) \\
+2--8.11 & dostrojenie generatora do zmierzonych parametrów, ponowny trening, ablacje &
+          nagranie zbioru rzeczywistego + \emph{ground truth} &
+          rozdz.\ 4 i~6 (opis generatora i~stanowiska) \\
+9--15.11 & \multicolumn{2}{p{9.8cm}}{ewaluacja na danych rzeczywistych, analiza sim-to-real, czas inferencji} &
+           rozdz.\ 5 (modele) \\
+16--22.11 & \multicolumn{2}{p{9.8cm}}{uzupełnienie eksperymentów, rysunki i~tabele} &
+            rozdz.\ 7--8, \textbf{wersja robocza do opiekuna} \\
+23--30.11 & \multicolumn{2}{p{9.8cm}}{poprawki po uwagach opiekuna} & finalizacja, oddanie \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Kamienie milowe:} M1 (1.11) -- stanowisko skalibrowane, zmierzone parametry przekazane
+do generatora; M2 (8.11) -- zbiór rzeczywisty gotowy; M3 (15.11) -- komplet wyników;
+M4 (22.11) -- pełna wersja robocza tekstu.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{5.2cm}Y}
+\toprule
+Ryzyko & Działanie zapobiegawcze \\
+\midrule
+Brak sprzętowej synchronizacji kamer & pomiar przesunięcia czasowego (np.\ dioda/ekran z~licznikiem); w~generatorze losowy $\Delta t$; moduł estymacji przesunięcia w~modelu hybrydowym \\
+Duża luka sim-to-real & dopasowanie parametrów generatora do pomiarów; zdjęcia źródłowe z~własnych kamer (statyw = brak RS); obiekty ruchome w~generatorze v2 \\
+Brak lokalnego GPU & Google Colab (T4), małe rozdzielczości ($256^2$), krótkie przebiegi ablacji \\
+Trudne \emph{ground truth} dla danych rzeczywistych & sceny statyczne (kamera nieruchoma = GS) i~płaskie plansze (szachownica + homografia) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% ===========================================================================
+\needspace{14\baselineskip}
+\section{Proponowany spis treści}
+\label{sec:toc}
+
+Proponujemy jedną wspólną pracę z~oznaczonym autorstwem rozdziałów.
+Część \IK{} to rozdz.\ 4--5, część \HW{} to rozdz.\ 6, rozdziały 1--3 i~7--8 są wspólne lub
+podzielone na podrozdziały.
+
+\begin{toc}
+\item \textbf{Wstęp} \WS
+  \begin{toc}
+    \item Motywacja: zjawisko RS w~kamerach CMOS i~jego skutki
+    \item Cel i~zakres pracy, pytania badawcze
+    \item Koncepcja dwóch prostopadłych kamer
+    \item Podział pracy między autorów
+    \item Układ pracy
+  \end{toc}
+
+\item \textbf{Podstawy teoretyczne} \WS
+  \begin{toc}
+    \item Model kamery otworkowej, parametry wewnętrzne, zniekształcenia obiektywu \HW
+    \item Przetworniki CMOS: migawka szczelinowa a~globalna, czas odczytu, ekspozycja \HW
+    \item Matematyczny model zniekształceń RS: poza kamery jako funkcja czasu odczytu wiersza;
+          rodzaje zniekształceń (skew, wobble, rozciąganie) \IK
+    \item Geometria dwóch kamer: baza, paralaksa, rektyfikacja; przypadek kamery obróconej o~$90^\circ$ \WS
+    \item Sieci splotowe w~estymacji ruchu i~rekonstrukcji obrazu: U-Net, warstwa korelacji,
+          różniczkowalne przekształcanie obrazu (\emph{warping}) \IK
+  \end{toc}
+  \dysk{czy teoria CMOS i~kalibracji ma być tutaj, czy na początku rozdz.~6 (wtedy rozdz.~2 byłby krótszy)?}
+
+\item \textbf{Przegląd literatury} \WS
+  \begin{toc}
+    \item Metody klasyczne: modele ruchu, korekcja z~użyciem żyroskopu~\cite{liang2008,forssen2010,karpenko2011}
+    \item Uczenie głębokie, jedna klatka~\cite{rengarajan2017,zhuang2019}
+    \item Uczenie głębokie, wiele klatek~\cite{dsun2020,sunet2021,bsrsc2022}
+    \item Układy z~dwiema kamerami / dwoma kierunkami odczytu~\cite{albl2020,zhong2022}
+    \item Zbiory danych dla korekcji RS (syntetyczne i~rzeczywiste) i~sposoby ich tworzenia
+    \item Podsumowanie: luka, którą wypełnia praca
+  \end{toc}
+
+\item \textbf{Generowanie danych syntetycznych} \IK
+  \begin{toc}
+    \item Wymagania wobec danych: zgodność ze stanowiskiem, dokładne \emph{ground truth}, skala
+    \item Przegląd podejść: obrazy statyczne + model ruchu, wideo o~dużej liczbie klatek
+          z~interpolacją~\cite{rife2022,zhong2022}, renderowanie 3D; uzasadnienie wyboru
+    \item Model sceny i~ruchu
+      \begin{toc}
+        \item Scena płaska, parametryzacja ruchu ($\boldsymbol\omega$, $\boldsymbol\alpha$, $\mathbf v$) w~pikselach przesunięcia
+        \item Czas odczytu piksela dla kamery A (wiersze) i~B (kolumny), przesunięcie synchronizacji
+        \item Baza stereo i~obrót kamery B
+      \end{toc}
+    \item Algorytm renderowania obrazów RS i~GS (odwzorowanie wsteczne, margines, odrzucanie próbek)
+    \item \emph{Ground truth}: obraz GS, pole przemieszczeń (iteracja punktu stałego), maska widoczności, korespondencje
+    \item Model fotometryczny: wzmocnienie, szum, rozmycie ruchu w~czasie ekspozycji
+    \item Generator v2: niezależnie poruszające się obiekty (warstwy), zbiory statyczny i~dynamiczny
+    \item Dopasowanie parametrów do rzeczywistych kamer (dane z~rozdz.~6)
+    \item Opis zbiorów: źródła (DIV2K~\cite{div2k}, zdjęcia z~własnych kamer), liczność, podział, format
+    \item Weryfikacja poprawności generatora (szachownica testowa, kontrola wizualna, test odwracalności)
+    \item Ograniczenia: płaska scena, równoległe osie optyczne, brak zniekształceń obiektywu
+  \end{toc}
+  \dysk{karta tematu wymienia ,,interpolację klatek'' -- czy wystarczy omówić to podejście jako
+  alternatywę, czy trzeba zaimplementować drugi generator (wideo 240\,fps + RIFE + próbkowanie wierszy)?}
+
+\item \textbf{Modele korekcji i~ich trenowanie} \IK
+  \begin{toc}
+    \item Sformułowanie zadania: wejście (RS A, RS B obrócony), wyjście (GS A), co jest znane ($f$)
+    \item Architektury
+      \begin{toc}
+        \item MotionNet: ekstraktor syjamski, warstwa korelacji, regresja 9 parametrów ruchu,
+              różniczkowalna geometria RS
+        \item Wariant jednokamerowy (ablacja kamery B)
+        \item Gęsty przepływ (U-Net~\cite{unet}) bez geometrii, z~korelacją i~bez niej
+        \item Model hybrydowy: MotionNet (ruch globalny) + U-Net (korekty lokalne dla A i~B,
+              estymacja przesunięcia B, maska fuzji, residuum obrazu)
+      \end{toc}
+    \item Funkcje straty: MSE na polu przemieszczeń, maskowane L1 na obrazie, wagi
+    \item Proces trenowania: generowanie danych, augmentacja, optymalizator, harmonogram,
+          obcinanie gradientu, środowisko (Colab T4), trening dwuetapowy (MotionNet zamrożony)
+    \item Problemy napotkane w~trakcie i~ich rozwiązania: ,,martwe'' ReLU w~głowicy regresji,
+          L1 zatrzymujące sieć na zerowym ruchu, nieobserwowalny FOV (predykcja w~pikselach),
+          brak uczenia przy wczesnej fuzji bez korelacji
+    \item Inferencja dla par rzeczywistych: obrót, wspólny kwadratowy wycinek, skalowanie,
+          usunięcie zniekształceń obiektywu
+  \end{toc}
+
+\item \textbf{Stanowisko pomiarowe i~zbiór danych rzeczywistych} \HW
+  \begin{toc}
+    \item Wymagania wobec stanowiska (wynikające z~modelu i~generatora)
+    \item Dobór kamer: przetwornik, tryby pracy, interfejs USB/UVC, sterowanie ekspozycją
+    \item Konstrukcja uchwytu: montaż prostopadły, baza ok.\ 3\,cm, sztywność
+    \item Oprogramowanie akwizycji: równoczesny zapis z~dwóch kamer, znaczniki czasu, stałe
+          ustawienia (ekspozycja, wzmocnienie, balans bieli)
+    \item Charakterystyka czasowa
+      \begin{toc}
+        \item Pomiar czasu odczytu matrycy (migająca dioda LED / obracający się wentylator)
+        \item Pomiar przesunięcia czasowego między kamerami i~jego zmienności
+        \item Synchronizacja: możliwości sprzętowe i~programowe, ograniczenia
+      \end{toc}
+    \item Kalibracja: parametry wewnętrzne i~zniekształcenia~\cite{zhang2000}, kalibracja
+          stereo, rektyfikacja, wyznaczenie kierunku obrotu kamery B
+    \item Zbiór danych rzeczywistych
+      \begin{toc}
+        \item Scenariusze: ruch ręczny, wibracje, panoramowanie, sceny z~obiektami ruchomymi
+        \item \emph{Ground truth}: ujęcia statyczne, płaskie plansze (szachownica + homografia)
+        \item Organizacja, format i~opis zbioru
+      \end{toc}
+    \item Parametry przekazane do generatora i~porównanie ich z~założeniami symulacji
+  \end{toc}
+  \dysk{karta zakłada ,,zsynchronizowane kamery'' -- czy pomiar i~kompensacja przesunięcia
+  czasowego jest akceptowalna, czy próbujemy synchronizacji sprzętowej?}
+
+\item \textbf{Eksperymenty i~wyniki} \WS
+  \begin{toc}
+    \item Metodyka: metryki (maskowane PSNR, SSIM~\cite{ssim}, EPE, czas inferencji), punkt
+          odniesienia ,,brak korekcji'', protokół testów
+    \item Wyniki na danych syntetycznych: porównanie architektur \IK
+    \item Ablacje: wpływ kamery B, warstwy korelacji, geometrii; odporność na błędy czasu
+          odczytu, przesunięcia czasowego i~bazy \IK
+    \item Wyniki na danych rzeczywistych i~analiza sim-to-real \WS
+    \item Czas inferencji i~możliwość pracy w~czasie rzeczywistym \WS
+    \item Porównanie z~metodami z~literatury \WS
+    \item Dyskusja wyników i~ograniczeń
+  \end{toc}
+  \dysk{karta wspomina ,,analizę porównawczą ... systemów SOTA''. Jaki zakres wystarczy:
+  porównanie z~opublikowanymi modelami (np.\ \cite{dsun2020,bsrsc2022}) na naszych danych,
+  porównanie z~metodą klasyczną, czy tylko dyskusja jakościowa?}
+
+\item \textbf{Podsumowanie} \WS
+  \begin{toc}
+    \item Odpowiedzi na pytania badawcze i~osiągnięte cele
+    \item Wkład każdego z~autorów
+    \item Kierunki dalszych prac: scena z~głębią, synchronizacja sprzętowa, sekwencje wideo
+          (spójność czasowa), uruchomienie na urządzeniu wbudowanym
+  \end{toc}
+
+\item[] \textbf{Bibliografia}
+\item[] \textbf{Dodatki:} A.~Instrukcja uruchomienia (generator, trening, inferencja) \IK;
+        B.~Rysunki techniczne uchwytu i~procedura kalibracji \HW; C.~Opis struktury zbiorów danych \WS
+\end{toc}
+
+% ===========================================================================
+\section{Kwestie do ustalenia na spotkaniu}
+\label{sec:dysk}
+\begin{enumerate}[itemsep=2pt]
+  \item \textbf{Forma pracy:} jedna wspólna praca z~oznaczonym autorstwem rozdziałów czy dwie
+        części z~osobnymi wstępami? Wymagany/oczekiwany objętościowo zakres na osobę?
+  \item \textbf{,,Sekwencje wideo'' w~tytule:} model działa na parach klatek. Czy wystarczy
+        przetwarzanie klatka po klatce + ocena na nagraniach, czy oczekiwana jest spójność czasowa?
+  \item \textbf{Interpolacja klatek w~generatorze} (rozdz.~4) -- implementacja czy omówienie.
+  \item \textbf{Synchronizacja kamer} (rozdz.~6) -- pomiar przesunięcia czy synchronizacja sprzętowa.
+  \item \textbf{Zakres porównania z~SOTA} (rozdz.~7).
+  \item \textbf{Prototyp ,,systemu''} z~karty: czy potrzebne demo działające na żywo z~kamer
+        (np.\ prosty program na laptopie)? Jeśli tak, proponujemy przypisać je do części \HW{}
+        (integracja ze stanowiskiem).
+  \item \textbf{Harmonogram:} czy wersja robocza do 22.11 jest dla opiekuna dobrym terminem?
+\end{enumerate}
+
+% ===========================================================================
+\begin{thebibliography}{99}\small
+\bibitem{liang2008} C.-K.~Liang, L.-W.~Chang, H.~H.~Chen, \emph{Analysis and Compensation of Rolling Shutter Effect}, IEEE Trans.\ Image Processing, 2008.
+\bibitem{forssen2010} P.-E.~Forssén, E.~Ringaby, \emph{Rectifying Rolling Shutter Video from Hand-held Devices}, CVPR 2010.
+\bibitem{karpenko2011} A.~Karpenko i~in., \emph{Digital Video Stabilization and Rolling Shutter Correction using Gyroscopes}, Stanford Tech.\ Report, 2011.
+\bibitem{rengarajan2017} V.~Rengarajan, Y.~Balaji, A.~N.~Rajagopalan, \emph{Unrolling the Shutter: CNN to Correct Motion Distortions}, CVPR 2017.
+\bibitem{zhuang2019} B.~Zhuang, Q.-H.~Tran, P.~Ji, L.-F.~Cheong, M.~Chandraker, \emph{Learning Structure-And-Motion-Aware Rolling Shutter Correction}, CVPR 2019.
+\bibitem{dsun2020} P.~Liu, Z.~Cui, V.~Larsson, M.~Pollefeys, \emph{Deep Shutter Unrolling Network}, CVPR 2020.
+\bibitem{albl2020} C.~Albl i~in., \emph{From Two Rolling Shutters to One Global Shutter}, CVPR 2020.
+\bibitem{sunet2021} B.~Fan, Y.~Dai, M.~He, \emph{SUNet: Symmetric Undistortion Network for Rolling Shutter Correction}, ICCV 2021.
+\bibitem{bsrsc2022} M.~Cao i~in., \emph{Learning Adaptive Warping for Real-World Rolling Shutter Correction}, CVPR 2022.
+\bibitem{zhong2022} Z.~Zhong i~in., \emph{Bringing Rolling Shutter Images Alive with Dual Reversed Distortion}, ECCV 2022.
+\bibitem{flownet} A.~Dosovitskiy i~in., \emph{FlowNet: Learning Optical Flow with Convolutional Networks}, ICCV 2015.
+\bibitem{pwcnet} D.~Sun, X.~Yang, M.-Y.~Liu, J.~Kautz, \emph{PWC-Net: CNNs for Optical Flow Using Pyramid, Warping, and Cost Volume}, CVPR 2018.
+\bibitem{unet} O.~Ronneberger, P.~Fischer, T.~Brox, \emph{U-Net: Convolutional Networks for Biomedical Image Segmentation}, MICCAI 2015.
+\bibitem{rife2022} Z.~Huang i~in., \emph{Real-Time Intermediate Flow Estimation for Video Frame Interpolation}, ECCV 2022.
+\bibitem{div2k} E.~Agustsson, R.~Timofte, \emph{NTIRE 2017 Challenge on Single Image Super-Resolution: Dataset and Study}, CVPRW 2017.
+\bibitem{zhang2000} Z.~Zhang, \emph{A Flexible New Technique for Camera Calibration}, IEEE TPAMI, 2000.
+\bibitem{ssim} Z.~Wang, A.~C.~Bovik, H.~R.~Sheikh, E.~P.~Simoncelli, \emph{Image Quality Assessment: From Error Visibility to Structural Similarity}, IEEE Trans.\ Image Processing, 2004.
+\end{thebibliography}
+
+\end{document}
