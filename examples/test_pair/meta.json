@@ -1,0 +1,26 @@
+{
+ "kind": "video",
+ "fps": 1000.0,
+ "size": 256,
+ "b_rot_k": 1,
+ "interp": "linear",
+ "readout_a_s": 0.03,
+ "readout_b_s": 0.03,
+ "sync_offset_s": -0.001418105847253873,
+ "baseline_px": 3.252082693985013,
+ "baseline_src_px": 4,
+ "t_c_ms": 45.0,
+ "frame_c": 45,
+ "crop": [
+  269,
+  377,
+  310
+ ],
+ "gain_a": 1.0,
+ "gain_b": 1.0,
+ "f": 245.88571225230925,
+ "f_is_estimate": true,
+ "ref_time": "middle of camera A readout",
+ "source": "data/x4k/encoded_train/152/occ010.683_f4177.mp4",
+ "rs_disp_p95_px": 40.03
+}

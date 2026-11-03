@@ -1,0 +1,9 @@
+{
+ "readout_ms": [15.0, 30.0],
+ "sync_offset_ms": [-2.0, 2.0],
+ "baseline_px": [0.0, 8.0],
+ "crop_px": [256, 540],
+ "speedup": [1, 2],
+ "gain": [0.9, 1.1],
+ "noise_std": [0.0, 0.01]
+}

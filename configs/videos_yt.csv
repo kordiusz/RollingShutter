@@ -1,0 +1,10 @@
+# Lista nagrań dla src/prep_video.py --list configs/videos_yt.csv
+# name     = nazwa sceny (folder); puste = id filmu. Ta sama nazwa = ta sama scena przy podziale train/val.
+# source   = URL (YouTube/Vimeo, potrzebny yt-dlp) albo ścieżka do pliku
+# fps      = szybkość ZAPISU kamery (z opisu filmu / napisu na ekranie), nie fps pliku
+# segments = zakresy czasu odtwarzania "m:ss-m:ss", rozdzielone ";", opcjonalnie "@fps" gdy segment ma inną szybkość;
+#            puste = cały film. Pomijaj intro, fragmenty w czasie rzeczywistym, rampy prędkości i przenikania.
+# roi      = stały wycinek x,y,w,h (np. bez logo / napisów); puste = automatyczne obcięcie czarnych pasów
+name,source,fps,segments,roi
+# przyklad_1,https://www.youtube.com/watch?v=XXXXXXXXXXX,1000,0:15-1:10;1:30-2:05,
+# przyklad_2,data/yt/raw/moj_film.mp4,1000,,0,140,1920,800
