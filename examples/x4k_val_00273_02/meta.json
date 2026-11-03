@@ -1,0 +1,26 @@
+{
+ "kind": "video",
+ "fps": 1000.0,
+ "size": 256,
+ "b_rot_k": 1,
+ "interp": "linear",
+ "readout_a_s": 0.02175205807230334,
+ "readout_b_s": 0.02175205807230334,
+ "sync_offset_s": -0.001145910563970077,
+ "baseline_px": 4.261161238053973,
+ "baseline_src_px": 8,
+ "t_c_ms": 24.0,
+ "frame_c": 24,
+ "crop": [
+  133,
+  240,
+  507
+ ],
+ "gain_a": 0.9308016952575134,
+ "gain_b": 1.0996011779528294,
+ "f": 245.88571225230925,
+ "f_is_estimate": true,
+ "ref_time": "middle of camera A readout",
+ "source": "047\\occ009.894_f1217.mp4",
+ "augment": true
+}

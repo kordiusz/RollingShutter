@@ -6,6 +6,10 @@
   python src/train_raft.py --data dataset_video --epochs 10 --bs 8 --out runs --name 2026-10-24_raft_geom
   # evaluate a checkpoint
   python src/train_raft.py --data dataset_video --eval runs/<run>/best.pt --eval-json eval.json
+  # continue from a fine-tuned checkpoint (e.g. trained with v1) with the default geometry v2
+  python src/train_raft.py --data dataset_video --init runs/<run>/best.pt --epochs 5 --name 2026-11-03_raft_geom_v2
+  # evaluate with the old geometry (v1: no object-edge handling, camera B not used for the output)
+  python src/train_raft.py --data dataset_video --eval runs/<run>/best.pt --geom v1
 
 Loss: L1 between the corrected image and the target, where the source pixel
 lies inside image A. Metrics on the same region: psnr/ssim (and *_in = no correction).
@@ -87,10 +91,13 @@ def main():
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--size", default="large", choices=["large", "small"])
     ap.add_argument("--iters", type=int, default=12, help="RAFT refinement iterations")
+    ap.add_argument("--geom", default="v2", choices=["v1", "v2"],
+                    help="v2 (default): object edges + pixels unseen by A taken from B (RAFT runs A->B and B->A)")
     ap.add_argument("--freeze-fnet", action="store_true", help="keep RAFT's feature encoder frozen")
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--no-pretrained", action="store_true", help="(debug) random RAFT weights")
+    ap.add_argument("--init", default=None, help="start fine-tuning from this checkpoint's RAFT weights (best.pt)")
     a = ap.parse_args()
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -104,9 +111,9 @@ def main():
 
     if a.eval or a.zero_shot:
         if a.eval:
-            model = load_raft_geom(a.eval, dev)
+            model = load_raft_geom(a.eval, dev, geom=a.geom)
         else:
-            model = RaftGeom(a.size, not a.no_pretrained, a.iters, rot_k).to(dev)
+            model = RaftGeom(a.size, not a.no_pretrained, a.iters, rot_k, a.geom).to(dev)
         t0 = time.time()
         r = evaluate(model, val_dl, dev)
         r["ms_per_pair"] = (time.time() - t0) / len(val_ds) * 1000
@@ -116,7 +123,7 @@ def main():
         run = Path(a.out) / name
         run.mkdir(parents=True, exist_ok=True)
         save_preview(model, preview, dev, run / "preview_eval.png")
-        out = {"checkpoint": a.eval or f"pretrained raft_{a.size}", "data": str(Path(a.data) / "val"),
+        out = {"checkpoint": a.eval or f"pretrained raft_{a.size}", "geom": a.geom, "data": str(Path(a.data) / "val"),
                "metrics": r, **run_context(dev)}
         Path(a.eval_json or run / "eval.json").write_text(json.dumps(out, indent=1))
         print("saved", a.eval_json or run / "eval.json", "and", run / "preview_eval.png")
@@ -128,8 +135,11 @@ def main():
     train_ds = RSSampleDataset(Path(a.data) / "train", limit=a.limit)
     train_dl = DataLoader(train_ds, batch_size=a.bs, shuffle=True, num_workers=a.workers, drop_last=True,
                           pin_memory=dev.type == "cuda", persistent_workers=a.workers > 0)
-    model_args = dict(size=a.size, iters=a.iters, rot_k=rot_k)
+    model_args = dict(size=a.size, iters=a.iters, rot_k=rot_k, geom=a.geom)
     model = RaftGeom(pretrained=not a.no_pretrained, **model_args).to(dev)
+    if a.init:
+        model.raft.load_state_dict(torch.load(a.init, map_location=dev)["raft"])
+        print("RAFT weights from", a.init)
     if a.freeze_fnet:
         for p in model.raft.feature_encoder.parameters():
             p.requires_grad_(False)
