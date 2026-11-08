@@ -8,9 +8,16 @@ Or two images directly with --a / --b and the timing on the command line.
   python src/demo.py examples/kolo examples/x4k_val_00839_01 --out demo.png --gif demo.gif
   python src/demo.py --a rs_a.png --b rs_b.png --readout-ms 20 --sync-ms 0 --baseline 3 --out wynik.png
   python src/demo.py examples/kolo --ckpt runs/<run>/best.pt --compare-v1 --out demo.png
+  python src/demo.py examples/kolo --unet-ckpt runs/<run>_raft_unet_ft/best.pt --out unet.jpg --gif unet.gif
 
 Picture columns: RS A | RS B (rotated back to A) | result | GS target (if known) [| result of geometry v1]
 GIF: RS A and the result alternate, so the straightening is easy to see.
+
+With --unet-ckpt (checkpoint of train_unet.py, mode refine) the demo compares the result without and
+with the U-Net. Without --ckpt, "without U-Net" uses the RAFT weights from the same checkpoint and
+geometry --geom, so the only difference is the U-Net.
+Picture columns: RS A | RS B | without U-Net | with U-Net | GS | error without | error with (x4)
+GIF: RS A -> without U-Net -> with U-Net.
 """
 import argparse
 import json
@@ -64,6 +71,27 @@ def label(im, top, bottom=None, scale=1.0):
     return im
 
 
+def compare_unet(s, out, out_u, up, sc):
+    """One sample, result without and with the U-Net: picture row and GIF frames."""
+    gs = s["gs_a"]
+    p = lambda im: f"PSNR {psnr(im, gs):.1f} dB" if gs is not None else None
+    err = lambda im: np.clip(np.abs(im.astype(np.float32) - gs.astype(np.float32)) * 4, 0, 255).astype(np.uint8)
+    print(f"{s['name']}: T {s['T']:.1f} ms" + (f" | wejscie {p(s['rs_a'])}, bez U-Netu {p(out)}, z U-Netem {p(out_u)}"
+                                               if gs is not None else ""))
+    tiles = [label(up(s["rs_a"]), "RS A - wejscie", p(s["rs_a"]), sc),
+             label(up(s["rs_b"]), "RS B - wejscie", None, sc),
+             label(up(out), "RAFT + geometria (bez U-Netu)", p(out), sc),
+             label(up(out_u), "RAFT + geometria + U-Net", p(out_u), sc)]
+    if gs is not None:
+        tiles += [label(up(gs), "GS - jak powinno byc", None, sc),
+                  label(up(err(out)), "blad bez U-Netu x4", None, sc),
+                  label(up(err(out_u)), "blad z U-Netem x4", None, sc)]
+    frames = (label(up(s["rs_a"]), "PRZED: kamera A (rolling shutter)", p(s["rs_a"]) or s["name"], sc),
+              label(up(out), "PO: RAFT + geometria (bez U-Netu)", p(out) or s["name"], sc),
+              label(up(out_u), "PO: RAFT + geometria + U-Net", p(out_u) or s["name"], sc))
+    return np.hstack(tiles), frames
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("samples", nargs="*", help="sample folders")
@@ -76,6 +104,8 @@ def main():
     ap.add_argument("--ckpt", default=None, help="fine-tuned RAFT (best.pt); default: pretrained RAFT")
     ap.add_argument("--geom", default="v2", choices=["v1", "v2"])
     ap.add_argument("--compare-v1", action="store_true", help="add a column with the old geometry (v1)")
+    ap.add_argument("--unet-ckpt", default=None, help="RAFT + geometry + U-Net (train_unet.py best.pt): "
+                    "compare the result without and with the U-Net")
     ap.add_argument("--scale", type=float, default=2.0, help="enlarge the picture")
     ap.add_argument("--out", default="demo.png")
     ap.add_argument("--gif", default=None, help="also save an animation RS A <-> result")
@@ -90,13 +120,27 @@ def main():
     if not samples:
         ap.error("give sample folders or --a / --b")
     torch.set_grad_enabled(False)
-    model = load_raft_geom(a.ckpt, dev, rot_k=samples[0]["rot_k"], geom=a.geom)
+    unet = None
+    if a.unet_ckpt:
+        from raft_unet import load_model
+        unet, ck = load_model(a.unet_ckpt, dev)
+        assert ck["mode"] == "refine", f"--unet-ckpt: expected a refine model, got {ck['mode']}"
+    if unet is not None and a.ckpt is None:
+        model = unet.geom                                 # the same RAFT weights, without the U-Net
+        model.geom = a.geom
+    else:
+        model = load_raft_geom(a.ckpt, dev, rot_k=samples[0]["rot_k"], geom=a.geom)
     model_v1 = load_raft_geom(a.ckpt, dev, rot_k=samples[0]["rot_k"], geom="v1") if a.compare_v1 else None
 
     up = lambda im: cv2.resize(im, None, fx=a.scale, fy=a.scale, interpolation=cv2.INTER_CUBIC)
     rows, frames = [], []
     for s in samples:
         out, aux = correct(model, s, dev)
+        if unet is not None:
+            row, fr = compare_unet(s, out, correct(unet, s, dev)[0], up, a.scale / 2)
+            rows.append(row)
+            frames.append(fr)
+            continue
         has_gs = s["gs_a"] is not None
         p_in = f"PSNR {psnr(s['rs_a'], s['gs_a']):.1f} dB" if has_gs else None
         p_out = f"PSNR {psnr(out, s['gs_a']):.1f} dB" if has_gs else None
@@ -121,8 +165,8 @@ def main():
     if a.gif:
         from PIL import Image
         imgs = []
-        for before, after in frames:
-            imgs += [Image.fromarray(before[..., ::-1]), Image.fromarray(after[..., ::-1])]
+        for fr in frames:
+            imgs += [Image.fromarray(f[..., ::-1]) for f in fr]
         imgs[0].save(a.gif, save_all=True, append_images=imgs[1:], duration=900, loop=0)
         print("saved", a.gif)
 

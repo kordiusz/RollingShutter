@@ -96,7 +96,7 @@ głównie drobne błędy, które zostają po geometrii. Geometria v2 pomaga najb
 Kolumny obrazów: RS A (wejście) | RS B (wejście, obrócony do orientacji A) | **wynik** | wzorzec GS | stara geometria (v1).
 GIF-y pokazują na przemian obraz z kamery A (przed) i wynik (po). Model: gotowy RAFT + geometria v2
 (bez dostrajania, liczone lokalnie); wersja z dostrojonym modelem: `z_colaba/demo_dostrojony_v2.*`.
-Demo nie używa jeszcze U-Netu z sekcji 4 (`src/demo.py` obsługuje na razie tylko RAFT + geometrię).
+Porównanie z U-Netem i bez: sekcja 6a.
 
 | przykład | co to jest | wejście | wynik | dostrojony RAFT |
 |---|---|---|---|---|
@@ -119,6 +119,30 @@ Demo nie używa jeszcze U-Netu z sekcji 4 (`src/demo.py` obsługuje na razie tyl
 Pełne porównania (wszystkie kolumny): `demo/*.jpg`. Demo uruchamia się jedną komendą:
 `python src/demo.py examples/kolo examples/x4k_val_00273_02 --compare-v1 --out demo.png --gif demo.gif`.
 
+## 6a. Demo: z U-Netem i bez
+
+Najlepszy model (`2026-11-08_raft_unet_ft`). „Bez U-Netu” to ten sam RAFT z tego modelu i geometria v2,
+więc jedyna różnica to U-Net. GIF-y pokazują po kolei: obraz z kamery A → wynik bez U-Netu → wynik z U-Netem.
+Obrazki `demo/unet_*.jpg`: RS A | RS B | bez U-Netu | z U-Netem | GS | błąd bez U-Netu ×4 | błąd z U-Netem ×4.
+
+| przykład | wejście | bez U-Netu | z U-Netem |
+|---|---|---|---|
+| koło (`examples/kolo`) | 22,8 dB | 29,4 dB | **30,9 dB** |
+| torba (`val/00273_02`) | 14,9 dB | 28,5 dB | **30,7 dB** |
+| idąca osoba (`val/00276_02`) | 14,4 dB | 30,7 dB | **31,9 dB** |
+
+Co widać: bez U-Netu w miejscach wziętych z kamery B zostaje szew (ukośna krawędź przy żółtej torbie), a krawędź
+koła jest poszarpana. U-Net zszywa obie kamery bez szwu i wygładza krawędź. Środek koła (kratka) poprawia słabiej:
+tam leży pas na antyprzekątnej, gdzie prędkość jest tylko zgadywana z sąsiedztwa.
+
+![koło: z U-Netem i bez](demo/unet_kolo.gif)
+
+![torba: z U-Netem i bez](demo/unet_torba_val_00273_02.gif)
+
+![osoba: z U-Netem i bez](demo/unet_kobieta_val_00276_02.gif)
+
+Komenda: `python src/demo.py examples/kolo --unet-ckpt <run>_raft_unet_ft/best.pt --out unet.jpg --gif unet.gif`.
+
 ## 7. Ograniczenia i dalsze kroki
 
 - **Pas na antyprzekątnej**: tam obie kamery czytają punkt w tej samej chwili, więc prędkości nie da się zmierzyć
@@ -130,5 +154,5 @@ Pełne porównania (wszystkie kolumny): `demo/*.jpg`. Demo uruchamia się jedną
 - **Dane syntetyczne**: brak paralaksy zależnej od głębi, brak rozmycia ruchu, mały zakres przesunięcia startu kamer (±2 ms).
 - **U-Net** nie naprawi tego, czego nie widzi żadna kamera; zgaduje te miejsca z otoczenia. Model działa wolniej:
   ok. 52 ms na parę obrazów 256×256 na GPU L4 (RAFT + geometria + U-Net, sam czas sieci).
-- Następne kroki: demo z U-Netem, U-Net na geometrii v2 (dziś v1) i test na prawdziwej parze kamer (wiatrak),
+- Następne kroki: U-Net na geometrii v2 (dziś v1) i test na prawdziwej parze kamer (wiatrak),
   w tym sprawdzenie kierunku obrotu kamery B.
