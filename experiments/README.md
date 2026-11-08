@@ -23,6 +23,10 @@ Metryki na zbiorze walidacyjnym (syntetycznym), 256×256. PSNR/SSIM/EPE w obszar
 | (bez korekcji) | – | – | rs_video_x4k | – | – | – | 26.42 | 0.795 | – | – | – | – | punkt odniesienia dla zbioru z nagrań |
 | 2026-10-24_raft_zeroshot | 2026-10-24 | RAFT (gotowe wagi) + geometria RS, bez treningu | rs_video_x4k | 04_raft_geom | Colab Pro | 0 | 32.86 | 0.936 | – | – | (24.1)* | 5.3 M | ruch obiektów; +6,4 dB bez żadnego uczenia |
 | 2026-10-24_raft_geom | 2026-10-24 | RAFT dostrojony (L1 obrazu) + geometria RS | rs_video_x4k | 04_raft_geom | Colab Pro | 10 | **34.30** | **0.941** | – | – | (18.2)* | 5.3 M | lr 2e-5, bs 8, 108 s/epokę; nasycenie od ~5. epoki |
+| 2026-11-03_unet_plain | 2026-11-03 | zwykły U-Net (A, B, czasy odczytu → przepływ + residuum), bez RAFT | rs_video_x4k | 06_unet_plain | L4 | 30 | 28.45 | 0.845 | – | – | (3.9)* | 2.7 M | punkt odniesienia: bez RAFT i geometrii +2 dB |
+| (eval) raft_zeroshot, geometria v2 | 2026-11-03 | RAFT (gotowe wagi) + geometria v2 (krawędzie obiektów, dziury z kamery B) | rs_video_x4k | 07_demo_v2 | L4 | 0 | 33.25 | 0.937 | – | – | (32.0)* | 5.3 M | RAFT liczony A→B i B→A |
+| (eval) 2026-10-24_raft_geom, geometria v2 | 2026-11-03 | RAFT dostrojony z v1 + geometria v2 | rs_video_x4k | 07_demo_v2 | L4 | – | 34.39 | 0.941 | – | – | (32.0)* | 5.3 M | |
+| 2026-11-03_raft_geom_v2 | 2026-11-03 | RAFT dostrajany dalej z geometrią v2 (`--init` z 2026-10-24_raft_geom) | rs_video_x4k | 07_demo_v2 | L4 | 5 | **34.46** | **0.941** | – | – | – | 5.3 M | lr 1e-5, bs 8, 219 s/epokę; prawie bez zysku (+0,07 dB) |
 | *_refine_dual | planowany | 2 / MotionNet (zamrożony) + U-Net | rs_dataset_256 | 03_refine_unet | Colab Pro | 15 | | | | | | | |
 
 \* `ms_per_pair` w `train_raft.py` = czas całej ewaluacji / liczba par (z wczytywaniem danych i metrykami), nie czysty czas sieci.
@@ -35,3 +39,7 @@ Metryki na zbiorze walidacyjnym (syntetycznym), 256×256. PSNR/SSIM/EPE w obszar
 - 2026-10-24: RAFT + geometria: 26,42 → 32,86 dB bez treningu, 34,30 dB po dostrojeniu (+1,4 dB, nasycenie po ~5 epokach).
   Wejście ma już 26,4 dB, bo w wielu próbkach X4K ruch jest mały: średnia zaniża efekt na próbkach z silnym RS.
   Wyników nie porównywać wprost z MotionNet (inny zbiór: DIV2K, ruch kamery, wejście 19,7 dB).
+- 2026-11-03: zwykły U-Net na `rs_video_x4k`: 28,45 dB (+2 dB), czyli bez RAFT i geometrii sieć prawie się nie uczy korekcji.
+- 2026-11-03: geometria v2 (`correct_ab`): +0,4 dB bez dostrajania, +0,1 dB z dostrojonym RAFT; duży zysk tylko na
+  krawędziach ruchomych obiektów (syntetyczne koło 26,9 → 29,1 dB). Dalsze dostrajanie z v2: 34,46 dB (nasycenie).
+  Zestawienie i demo: `docs/wyniki_2026-11-08/`.
