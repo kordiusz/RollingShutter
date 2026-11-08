@@ -26,10 +26,12 @@ Metryki na zbiorze walidacyjnym (syntetycznym), 256×256. PSNR/SSIM/EPE w obszar
 | 2026-11-03_unet_plain | 2026-11-03 | zwykły U-Net (A, B, czasy odczytu → przepływ + residuum), bez RAFT | rs_video_x4k | 06_unet_plain | L4 | 30 | 28.45 | 0.845 | – | – | (3.9)* | 2.7 M | punkt odniesienia: bez RAFT i geometrii +2 dB |
 | (eval) raft_zeroshot, geometria v2 | 2026-11-03 | RAFT (gotowe wagi) + geometria v2 (krawędzie obiektów, dziury z kamery B) | rs_video_x4k | 07_demo_v2 | L4 | 0 | 33.25 | 0.937 | – | – | (32.0)* | 5.3 M | RAFT liczony A→B i B→A |
 | (eval) 2026-10-24_raft_geom, geometria v2 | 2026-11-03 | RAFT dostrojony z v1 + geometria v2 | rs_video_x4k | 07_demo_v2 | L4 | – | 34.39 | 0.941 | – | – | (32.0)* | 5.3 M | |
-| 2026-11-03_raft_geom_v2 | 2026-11-03 | RAFT dostrajany dalej z geometrią v2 (`--init` z 2026-10-24_raft_geom) | rs_video_x4k | 07_demo_v2 | L4 | 5 | **34.46** | **0.941** | – | – | – | 5.3 M | lr 1e-5, bs 8, 219 s/epokę; prawie bez zysku (+0,07 dB) |
+| 2026-11-03_raft_geom_v2 | 2026-11-03 | RAFT dostrajany dalej z geometrią v2 (`--init` z 2026-10-24_raft_geom) | rs_video_x4k | 07_demo_v2 | L4 | 5 | 34.46 | 0.941 | – | – | – | 5.3 M | lr 1e-5, bs 8, 219 s/epokę; prawie bez zysku (+0,07 dB) |
+| 2026-11-08_raft_unet | 2026-11-08 | RAFT (zamrożony, wagi z 2026-11-03_raft_geom_v2) + geometria v1 + U-Net refine | rs_video_x4k | 05_unet | L4 | 30 | 35.68 | 0.955 | – | – | 51.6 | 8.0 M (2.7 M uczone) | lr 3e-4, bs 8, 56 s/epokę; sam etap RAFT + geometria w tym modelu 34.36; psnr_full 35.24; kod `d70c697` |
+| 2026-11-08_raft_unet_ft | 2026-11-08 | jw., wspólne dostrajanie RAFT + U-Net (`--init` z 2026-11-08_raft_unet) | rs_video_x4k | 05_unet | L4 | 10 | **35.81** | **0.955** | – | – | 52.6 | 8.0 M | RAFT lr 1e-5, U-Net lr 1e-4, 126 s/epokę; +0,14 dB; psnr_full 35.37; waga B w masce 0.41 |
 | *_refine_dual | planowany | 2 / MotionNet (zamrożony) + U-Net | rs_dataset_256 | 03_refine_unet | Colab Pro | 15 | | | | | | | |
 
-\* `ms_per_pair` w `train_raft.py` = czas całej ewaluacji / liczba par (z wczytywaniem danych i metrykami), nie czysty czas sieci.
+\* `ms_per_pair` w `train_raft.py` = czas całej ewaluacji / liczba par (z wczytywaniem danych i metrykami), nie czysty czas sieci. W `train_unet.py` (runy `*_raft_unet*`) `ms_per_pair` to czysty czas sieci dla jednej pary.
 
 ## Wnioski na bieżąco
 - 2026-10-13: kamera B jest kluczowa (+8,9 dB z B vs +0,2 dB bez niej). Pozostały błąd MotionNet to głównie
@@ -43,3 +45,7 @@ Metryki na zbiorze walidacyjnym (syntetycznym), 256×256. PSNR/SSIM/EPE w obszar
 - 2026-11-03: geometria v2 (`correct_ab`): +0,4 dB bez dostrajania, +0,1 dB z dostrojonym RAFT; duży zysk tylko na
   krawędziach ruchomych obiektów (syntetyczne koło 26,9 → 29,1 dB). Dalsze dostrajanie z v2: 34,46 dB (nasycenie).
   Zestawienie i demo: `docs/wyniki_2026-11-08/`.
+- 2026-11-08: RAFT + geometria + U-Net (notatnik 05): 35,68 dB (RAFT zamrożony), 35,81 dB po wspólnym dostrajaniu,
+  czyli +1,35 dB względem najlepszego RAFT + geometrii. Zysk U-Netu podobny w każdej klasie siły RS (+1,3 do +1,6 dB):
+  słaby 36,58 → 38,18, średni 34,29 → 35,76, silny 31,93 → 33,20 dB. Poprawa w 303/321 próbkach. U-Net używa
+  wewnętrznie geometrii v1 (kod z `main`); do sprawdzenia wersja z geometrią v2.
