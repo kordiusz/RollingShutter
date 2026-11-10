@@ -14,6 +14,18 @@
    p = q + u(p) * t_A(p)   (fixed-point iteration), then warp A.
 Everything is differentiable, so RAFT can be fine-tuned with an image loss.
 
+Geometry "v2" (correct_ab, default of RaftGeom) fixes two errors of v1 at the edges
+of moving objects (test: a moving disc, data/analiza_agent/skrypty/test_kolo.py):
+  * at an object edge p = q + u(p) t_A(p) has two solutions, the background (u = 0,
+    p = q) and the object; v1 starts at p = q and stays on the background, so a strip
+    of background is left where the target shows the object. v2 also starts from the
+    velocity of the fastest neighbour and prefers the faster consistent solution
+    (a moving object covers the background);
+  * background that the object covered while A read those rows has no consistent
+    solution at all (A never saw it). v2 takes these pixels from camera B, brought
+    to t = 0 the same way, with B's velocity measured on B's own pixel grid
+    (RAFT is run a second time, B -> A).
+
 Units: times in ms, displacements in px of the S x S image, velocity in px/ms.
 Time convention = synth_rs.readout_times / synth_video.py (t = 0 at the middle
 of A's readout; B's readout centre is shifted by `sync`).
@@ -84,6 +96,24 @@ def velocity_from_flow(d, T, sync, base, rot_k=1, eps_frac=0.05, fill=61):
     return u, c
 
 
+def velocity_from_flow_b(d_ba, T, sync, base, rot_k=1, eps_frac=0.05, fill=61):
+    """Same as velocity_from_flow, but on camera B's pixel grid, from the flow B -> A
+    (d_ba = p_A - p_B):  d_ba - (b, 0) = u * (t_A - t_B)."""
+    n, _, S, _ = d_ba.shape
+    xs, ys = base_grid(n, S, S, d_ba.device, d_ba.dtype)
+    tB = readout_time(xs, ys, S, T, sync, rot_k, "b")
+    tA = readout_time(xs + d_ba[:, 0], ys + d_ba[:, 1], S, T, sync, rot_k, "a")
+    dt = (tA - tB)[:, None]
+    num = d_ba - _base_vec(base, n)
+    eps = (eps_frac * T).view(n, 1, 1, 1)
+    dt_safe = torch.where(dt >= 0, 1.0, -1.0) * dt.abs().clamp_min(eps)
+    u_dir = num / dt_safe
+    c = (dt ** 2 / (dt ** 2 + eps ** 2)) ** 2
+    num_b = F.avg_pool2d(u_dir * c, fill, 1, fill // 2, count_include_pad=False)
+    den_b = F.avg_pool2d(c, fill, 1, fill // 2, count_include_pad=False).clamp_min(1e-4)
+    return c * u_dir + (1 - c) * num_b / den_b, c
+
+
 def backward_flow(u, T, sync, rot_k=1, iters=6, cam="a", base=None):
     """For every output pixel q: where to take the colour in RS image A
     (cam="a": p = q + u(p) t_A(p)) or in RS image B (cam="b":
@@ -110,12 +140,69 @@ def correct_from_flow(rs_a, d, T, sync, base, rot_k=1):
     return warp(rs_a, fl), {"velocity": u, "conf": w, "flow": fl, "valid": valid}
 
 
+def _fixed_point(u, qx, qy, px, py, S, T, sync, rot_k, cam, iters):
+    """p = q + u(p) t(p) from the start p; returns p, the residual |q + u(p) t(p) - p| and |u(p)|."""
+    for _ in range(iters):
+        up = sample_field(u, px, py)
+        t = readout_time(px, py, S, T, sync, rot_k, cam)
+        px, py = qx + up[:, 0] * t, qy + up[:, 1] * t
+    up = sample_field(u, px, py)
+    t = readout_time(px, py, S, T, sync, rot_k, cam)
+    res = torch.hypot(qx + up[:, 0] * t - px, qy + up[:, 1] * t - py)
+    return px, py, res, torch.hypot(up[:, 0], up[:, 1])
+
+
+def backward_flow_fg(u, T, sync, rot_k=1, cam="a", base=None, iters=8, win=31, tol=0.5):
+    """backward_flow that prefers the moving object at its edges.
+    u is the velocity on the pixel grid of camera `cam` (velocity_from_flow for A,
+    velocity_from_flow_b for B). Two starts of the fixed-point iteration: p = q
+    (stays on the background) and p = q + u_fast t (u_fast = velocity of the fastest
+    pixel in a win x win window). The consistent solution is used; if both are,
+    the faster one (the object covers the background). Returns the flow p - q,
+    validity (p inside the image) and the residual: > tol = no consistent source,
+    i.e. this camera did not see the point."""
+    n, _, S, _ = u.shape
+    qx, qy = base_grid(n, S, S, u.device, u.dtype)
+    if cam == "b":
+        bv = _base_vec(base, n).to(u)
+        qx, qy = qx - bv[:, 0], qy - bv[:, 1]
+    s1 = _fixed_point(u, qx, qy, qx, qy, S, T, sync, rot_k, cam, iters)
+    speed = torch.hypot(u[:, 0], u[:, 1])[:, None]
+    _, idx = F.max_pool2d(speed, win, 1, win // 2, return_indices=True)
+    u_fast = torch.gather(u.flatten(2), 2, idx.flatten(2).expand(-1, 2, -1)).view_as(u)
+    u_fast = sample_field(u_fast, qx, qy)
+    t0 = readout_time(qx, qy, S, T, sync, rot_k, cam)
+    s2 = _fixed_point(u, qx, qy, qx + u_fast[:, 0] * t0, qy + u_fast[:, 1] * t0, S, T, sync, rot_k, cam, iters)
+    ok1, ok2 = s1[2] < tol, s2[2] < tol
+    take2 = (ok2 & (~ok1 | (s2[3] > s1[3] + 0.05))) | (~ok1 & ~ok2 & (s2[2] < s1[2]))
+    px, py = torch.where(take2, s2[0], s1[0]), torch.where(take2, s2[1], s1[1])
+    res = torch.where(take2, s2[2], s1[2])[:, None]
+    gx, gy = base_grid(n, S, S, u.device, u.dtype)
+    valid = ((px >= 0) & (px <= S - 1) & (py >= 0) & (py <= S - 1)).to(u.dtype)[:, None]
+    return torch.stack([px - gx, py - gy], 1), valid, res
+
+
+def correct_ab(rs_a, rs_b, d_ab, d_ba, T, sync, base, rot_k=1, tol=0.5):
+    """Geometry v2: corrected image from A (object preferred at its edges); pixels that
+    A did not see (or that left A's frame) are taken from B if B saw them.
+    rs_b in A's orientation; d_ab = flow A -> B, d_ba = flow B -> A."""
+    u_a, conf = velocity_from_flow(d_ab, T, sync, base, rot_k)
+    u_b, _ = velocity_from_flow_b(d_ba, T, sync, base, rot_k)
+    fa, va, ra = backward_flow_fg(u_a, T, sync, rot_k, "a", tol=tol)
+    fb, vb, rb = backward_flow_fg(u_b, T, sync, rot_k, "b", base, tol=tol)
+    from_b = (((ra > tol) | (va < 0.5)) & (rb <= tol) & (vb > 0.5)).to(rs_a.dtype)
+    out = from_b * warp(rs_b, fb) + (1 - from_b) * warp(rs_a, fa)
+    return out, {"velocity": u_a, "conf": conf, "flow": fa, "valid": va,
+                 "valid_ab": torch.maximum(va, from_b), "from_b": from_b}
+
+
 # ------------------------------------------------------------------ model
 class RaftGeom(nn.Module):
     """RAFT (pretrained, optionally fine-tuned) + fixed RS geometry."""
 
-    def __init__(self, size="large", pretrained=True, iters=12, rot_k=1):
+    def __init__(self, size="large", pretrained=True, iters=12, rot_k=1, geom="v2"):
         super().__init__()
+        self.geom = geom                                  # "v1": correct_from_flow, "v2": correct_ab
         from torchvision.models.optical_flow import (raft_large, raft_small,
                                                      Raft_Large_Weights, Raft_Small_Weights)
         if size == "large":
@@ -129,8 +216,14 @@ class RaftGeom(nn.Module):
         return self.raft(rs_a * 2 - 1, rs_b * 2 - 1, num_flow_updates=self.iters)[-1]
 
     def forward(self, rs_a, rs_b, T, sync, base):
-        d = self.flow_ab(rs_a, rs_b)
-        pred, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
+        if self.geom == "v1":
+            d = self.flow_ab(rs_a, rs_b)
+            pred, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
+        else:                                             # both directions in one RAFT batch
+            n = rs_a.shape[0]
+            d2 = self.flow_ab(torch.cat([rs_a, rs_b]), torch.cat([rs_b, rs_a]))
+            d = d2[:n]
+            pred, aux = correct_ab(rs_a, rs_b, d, d2[n:], T, sync, base, self.rot_k)
         aux["flow_ab"] = d
         return pred, aux
 
@@ -170,11 +263,12 @@ class RSSampleDataset(torch.utils.data.Dataset):
                 "base": f(m["baseline_px"]), "rot_k": torch.tensor(k)}
 
 
-def load_raft_geom(path=None, device="cpu", size="large", iters=12, rot_k=1):
-    """Fine-tuned checkpoint (path) or, without a path, the pretrained RAFT (zero-shot)."""
+def load_raft_geom(path=None, device="cpu", size="large", iters=12, rot_k=1, geom="v2"):
+    """Fine-tuned checkpoint (path) or, without a path, the pretrained RAFT (zero-shot).
+    `geom` picks the geometry; RAFT weights work with both (old checkpoints have no "geom")."""
     if path is None:
-        return RaftGeom(size=size, pretrained=True, iters=iters, rot_k=rot_k).to(device).eval()
+        return RaftGeom(size=size, pretrained=True, iters=iters, rot_k=rot_k, geom=geom).to(device).eval()
     ck = torch.load(path, map_location=device)
-    m = RaftGeom(pretrained=False, **ck["model_args"]).to(device)
+    m = RaftGeom(pretrained=False, **dict(ck["model_args"], geom=geom)).to(device)
     m.raft.load_state_dict(ck["raft"])
     return m.eval()

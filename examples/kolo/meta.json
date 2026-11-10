@@ -1,0 +1,33 @@
+{
+ "kind": "shapes",
+ "size": 256,
+ "b_rot_k": 1,
+ "readout_a_s": 0.02,
+ "readout_b_s": 0.02,
+ "sync_offset_s": 0.0,
+ "baseline_px": 3.0,
+ "ref_time": "middle of camera A readout",
+ "v_obj_px_per_ms": [
+  2.0,
+  0.0
+ ],
+ "omega_rad_per_ms": 0.0,
+ "v_bg_px_per_ms": [
+  0.0,
+  0.0
+ ],
+ "command_args": {
+  "out": "../examples/kolo",
+  "vx": 2.0,
+  "vy": 0.0,
+  "radius": 50,
+  "fan": false,
+  "rpm": 100,
+  "cam_vx": 0.0,
+  "cam_vy": 0.0,
+  "readout_ms": 20.0,
+  "sync_ms": 0.0,
+  "baseline": 3.0,
+  "seed": 0
+ }
+}
