@@ -1,0 +1,8 @@
+{
+ "max_pan_px": 40,
+ "obj_speed_px": [30, 60],
+ "obj_spin_rad": [0.5, 1.2],
+ "p_static_obj": 0.0,
+ "n_objects": [1, 2],
+ "obj_radius_frac": [0.1, 0.25]
+}

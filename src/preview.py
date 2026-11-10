@@ -33,6 +33,9 @@ def main():
         rb_back = np.ascontiguousarray(np.rot90(rb, -k))
         if meta.get("kind") == "video":
             info = f"video ro {meta['readout_a_s']*1e3:.0f}ms base {meta['baseline_px']:.1f}px"
+        elif meta.get("kind") == "layers":
+            info = (f"layers ro {meta['readout_a_s']*1e3:.0f}ms base {meta['baseline_px']:.1f}px "
+                    f"{len(meta['objects'])} obj")
         else:
             info = f"pan {np.hypot(*meta['w_rad_s'][:2]):.1f}rad/s ro {meta['readout_a_s']*1e3:.0f}ms"
         sep = np.full((ra.shape[0], 4, 3), 255, np.uint8)

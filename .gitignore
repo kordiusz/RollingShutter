@@ -20,3 +20,9 @@ __pycache__/
 
 # stare kopie sprzed porządków (24.10) - do przejrzenia i usunięcia
 _stare_do_usuniecia/
+
+#rzeczy filipa:
+demo_layers/*
+demo_mocny/*
+demo_zdjecia/*
+rs_layers/*
