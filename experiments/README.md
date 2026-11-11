@@ -29,7 +29,10 @@ Metryki na zbiorze walidacyjnym (syntetycznym), 256×256. PSNR/SSIM/EPE w obszar
 | 2026-11-03_raft_geom_v2 | 2026-11-03 | RAFT dostrajany dalej z geometrią v2 (`--init` z 2026-10-24_raft_geom) | rs_video_x4k | 07_demo_v2 | L4 | 5 | 34.46 | 0.941 | – | – | – | 5.3 M | lr 1e-5, bs 8, 219 s/epokę; prawie bez zysku (+0,07 dB) |
 | 2026-11-08_raft_unet | 2026-11-08 | RAFT (zamrożony, wagi z 2026-11-03_raft_geom_v2) + geometria v1 + U-Net refine | rs_video_x4k | 05_unet | L4 | 30 | 35.68 | 0.955 | – | – | 51.6 | 8.0 M (2.7 M uczone) | lr 3e-4, bs 8, 56 s/epokę; sam etap RAFT + geometria w tym modelu 34.36; psnr_full 35.24; kod `d70c697` |
 | 2026-11-08_raft_unet_ft | 2026-11-08 | jw., wspólne dostrajanie RAFT + U-Net (`--init` z 2026-11-08_raft_unet) | rs_video_x4k | 05_unet | L4 | 10 | **35.81** | **0.955** | – | – | 52.6 | 8.0 M | RAFT lr 1e-5, U-Net lr 1e-4, 126 s/epokę; +0,14 dB; psnr_full 35.37; waga B w masce 0.41 |
-| *_refine_dual | planowany | 2 / MotionNet (zamrożony) + U-Net | rs_dataset_256 | 03_refine_unet | Colab Pro | 15 | | | | | | | |
+| *_unet_plain_long | planowany | zwykły U-Net od zera, jak 2026-11-03_unet_plain, ale 200 epok | rs_video_x4k | 08_synteza | L4 | 200 | | | – | | | 2.7 M | czy 28,45 dB to tylko za krótki trening |
+| *_ae | planowany | autoenkoder bez skipów (latent 16×16×512), synteza obrazu wprost | rs_video_x4k | 08_synteza | L4 | 60 | | | – | | | 10.2 M | `psnr` = cały obraz |
+| *_corr | planowany | syjamski enkoder + korelacja A↔B + dekoder ze skipami, synteza wprost (A + poprawka) | rs_video_x4k | 08_synteza | L4 | 80 | | | – | | | 6.2 M | `psnr` = cały obraz |
+| *_refine_dual | porzucony | 2 / MotionNet (zamrożony) + U-Net | rs_dataset_256 | archiwum/03_refine_unet | – | – | | | | | | | zastąpiony przez RAFT + geometria + U-Net (05) |
 
 \* `ms_per_pair` w `train_raft.py` = czas całej ewaluacji / liczba par (z wczytywaniem danych i metrykami), nie czysty czas sieci. W `train_unet.py` (runy `*_raft_unet*`) `ms_per_pair` to czysty czas sieci dla jednej pary.
 

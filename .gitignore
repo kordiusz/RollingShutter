@@ -18,9 +18,6 @@ __pycache__/
 .env
 .github_token
 
-# stare kopie sprzed porządków (24.10) - do przejrzenia i usunięcia
-_stare_do_usuniecia/
-
 #rzeczy filipa:
 demo_layers/*
 demo_mocny/*

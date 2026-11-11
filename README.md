@@ -25,9 +25,12 @@ configs/             parametry generatora (kamery, zakresy ruchu)
 notebooks/           notatniki Colab, numerowane w kolejności użycia
   01_dataset.ipynb       generowanie zbioru -> Drive
   02_motionnet.ipynb     etap 1 (wytrenowany 13.10), ewaluacja / ponowny trening
-  03_refine_unet.ipynb   etap 2 (U-Net doszlifowujący)
-  04_raft_geom.ipynb     RAFT + geometria: ewaluacja, dostrajanie, demo wiatraka  <- AKTUALNY
-  archiwum/              stare notatniki (do odtworzenia historii)
+  04_raft_geom.ipynb     RAFT + geometria: ewaluacja, dostrajanie, demo wiatraka
+  05_unet.ipynb          RAFT + geometria + U-Net poprawiający (najlepszy model, 35,81 dB)
+  06_unet_plain.ipynb    zwykły U-Net bez RAFT i geometrii (punkt odniesienia, 30 epok)
+  07_demo_v2.ipynb       geometria v2, dostrojenie RAFT z v2, demo (koło, próbki ze zbioru)
+  08_synteza.ipynb       synteza obrazu wprost: zwykły U-Net od zera (długo), autoenkoder, enkoder + korelacja
+  archiwum/              stare notatniki (m.in. 03_refine_unet: MotionNet + U-Net, nieuruchomiony)
 experiments/README.md  REJESTR wszystkich treningów: co, kiedy, na czym, wyniki, gdzie wagi
 docs/                karta tematu, plan spotkań, rysunki do pracy; literatura (PDF-y tylko lokalnie)
 ```

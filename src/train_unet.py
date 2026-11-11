@@ -7,6 +7,9 @@
   python src/train_unet.py ... --mode refine --init runs/2026-11-03_raft_unet/best.pt --raft-lr 1e-5 --epochs 10
   # baseline: plain U-Net, no RAFT, no geometry
   python src/train_unet.py --data data/rs_video_x4k --mode plain --epochs 30 --bs 16 --name 2026-11-03_unet_plain
+  # direct synthesis: autoencoder without skips / siamese encoder + correlation layer
+  python src/train_unet.py --data data/rs_video_x4k --mode ae --epochs 60 --bs 16 --name 2026-11-11_ae
+  python src/train_unet.py --data data/rs_video_x4k --mode corr --epochs 60 --bs 16 --name 2026-11-11_corr
   # evaluation (+ per-sample metrics for the breakdown by RS strength)
   python src/train_unet.py --data data/rs_video_x4k --eval runs/<run>/best.pt --eval-json eval.json --per-sample val.csv
 
@@ -120,7 +123,8 @@ def inference_ms(model, dev, size, reps=30):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", required=True)
-    ap.add_argument("--mode", default="refine", choices=["refine", "plain"])
+    ap.add_argument("--mode", default="refine", choices=["refine", "plain", "ae", "corr"],
+                    help="ae / corr: direct synthesis (autoencoder / encoder + correlation), see raft_unet.py")
     ap.add_argument("--raft-ckpt", default=None, help="refine: RAFT from train_raft.py (best.pt); none = pretrained")
     ap.add_argument("--init", default=None, help="start from this checkpoint of train_unet.py (weights only)")
     ap.add_argument("--raft-lr", type=float, default=0.0, help="refine: > 0 also fine-tunes RAFT with this lr")
@@ -170,7 +174,7 @@ def main():
         print("saved", ej, "and", prev)
         return
 
-    name = a.name or ("raft_unet" if a.mode == "refine" else "unet_plain")
+    name = a.name or {"refine": "raft_unet", "plain": "unet_plain"}.get(a.mode, a.mode)
     run = Path(a.out) / name
     run.mkdir(parents=True, exist_ok=True)
     train_ds = RSSampleDataset(Path(a.data) / "train", limit=a.limit)
@@ -191,7 +195,7 @@ def main():
         model.geom.raft.load_state_dict(raft_sd)
     else:
         model_args = dict(width=a.width, rot_k=rot_k)
-        model = build("plain", **model_args)
+        model = build(a.mode, **model_args)
     if a.init:
         model.load_state_dict(torch.load(a.init, map_location="cpu")["model"])
     model = model.to(dev)

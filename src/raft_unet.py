@@ -17,11 +17,17 @@
    (rotated back), coordinates and per-pixel readout times of both cameras.
    Output: flow for A + image residual. Answers "can a U-Net alone learn it?"
    (on the camera-motion set the analogous flow_dual model barely learned).
+
+Direct synthesis (no flow, no geometry; "bezpośrednia synteza ramek" from the topic card):
+"ae"   classic autoencoder without skip connections, latent 16 x 16 x 512 (ConvAutoencoder).
+"corr" siamese encoder + correlation layer (cost volume) + decoder with skips (CorrSynthNet).
+Both get A, B, coordinates and readout times; their psnr is over the whole image (= psnr_full).
 """
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from model import UNet, coord_channels, warp
+from model import MotionNet, UNet, conv_block, coord_channels, warp
 from raft_geom import RaftGeom, backward_flow, base_grid, readout_time, velocity_from_flow
 
 U_SCALE = 1.0      # velocity [px/ms] is fed to the U-Net as is (typically |u| < 1)
@@ -107,6 +113,111 @@ class PlainUNet(nn.Module):
         return pred, {"flow_a": flow, "valid_a": valid_from_flow(flow)}
 
 
+def synth_inputs(rs_a, rs_b, T, sync, rot_k):
+    """[A, B, coordinates, readout times of A and B] -> 10 channels, shared by the synthesis models."""
+    n, _, h, w = rs_a.shape
+    return torch.cat([rs_a - 0.5, rs_b - 0.5, coord_channels(n, h, w, rs_a.device),
+                      time_maps(n, h, T, sync, rot_k, rs_a.device)], 1)
+
+
+def down(cin, cout):
+    """Stride-2 conv + conv block (halves the resolution)."""
+    return nn.Sequential(nn.Conv2d(cin, cout, 3, stride=2, padding=1), nn.LeakyReLU(0.1, inplace=True),
+                         conv_block(cout, cout))
+
+
+def up_to(x, ref):
+    return F.interpolate(x, size=ref.shape[-2:], mode="bilinear", align_corners=False)
+
+
+class ConvAutoencoder(nn.Module):
+    """"ae": classic autoencoder, NO skip connections. Direct synthesis of the GS image.
+
+    Encoder 256 -> 16 px (4 x stride 2), latent 16 x 16 x latent_ch (default 512 channels,
+    131k numbers vs 196k in the RS pair), decoder back to 256 px, output = image (no flow,
+    no copy of A). Everything the output shows has to pass through the latent, so this is
+    the reference "what a bottleneck alone can do": fine texture is expected to blur."""
+
+    def __init__(self, width=32, rot_k=1, latent_ch=512):
+        super().__init__()
+        self.rot_k = rot_k
+        ch = [width, 2 * width, 4 * width, 8 * width, latent_ch]           # 256, 128, 64, 32, 16 px
+        self.inc = conv_block(10, ch[0])
+        self.enc = nn.ModuleList(down(ch[i], ch[i + 1]) for i in range(4))
+        self.dec = nn.ModuleList(conv_block(ch[i + 1], ch[i]) for i in reversed(range(4)))
+        self.head = nn.Conv2d(ch[0], 3, 3, padding=1)
+        nn.init.normal_(self.head.weight, std=1e-3)
+        nn.init.zeros_(self.head.bias)
+
+    def forward(self, rs_a, rs_b, T, sync, base):
+        x = synth_inputs(rs_a, rs_b, T, sync, self.rot_k)
+        with torch.autocast(device_type=rs_a.device.type, dtype=torch.float16, enabled=rs_a.is_cuda):
+            z = self.inc(x)
+            for e in self.enc:
+                z = e(z)                                                   # latent (N, latent_ch, 16, 16)
+            for d in self.dec:
+                z = d(F.interpolate(z, scale_factor=2, mode="bilinear", align_corners=False))
+            out = self.head(z).float()
+        pred = (out + 0.5).clamp(0, 1)                                     # starts as a grey image
+        return pred, {"valid_a": torch.ones_like(pred[:, :1])}
+
+
+class CorrSynthNet(nn.Module):
+    """"corr": siamese encoder + correlation layer + decoder with skips. Direct synthesis.
+
+    A and B go through the same encoder (features at 1/2, 1/4, 1/8). A cost volume compares
+    A's features with B's shifted by up to +-r cells: at 1/8 (r=4) that is +-32 px, at 1/4
+    (r=3) +-12 px, i.e. the 10-40 px matches the problem needs, which a plain U-Net has to
+    discover by itself. With the readout times of both cameras the decoder can turn
+    "where is this point in B" into "where was it at the reference moment". A 1/16 stage adds
+    context. Output = rs_a + residual image: synthesis without any flow / warp / geometry
+    (starts as the identity, i.e. the uncorrected input)."""
+
+    def __init__(self, width=32, rot_k=1, r8=4, r4=3):
+        super().__init__()
+        self.rot_k, self.r8, self.r4 = rot_k, r8, r4
+        w = width
+        self.f1 = conv_block(3, w)                                         # 256 (encoder, shared A/B)
+        self.f2, self.f4, self.f8 = down(w, w), down(w, 2 * w), down(2 * w, 4 * w)   # 128, 64, 32
+        c8 = (2 * r8 + 1) ** 2 + 2 * 4 * w + 2 + 2                         # corr + fa + fb + coords + times
+        self.b8 = conv_block(c8, 8 * w)
+        self.b16 = down(8 * w, 8 * w)                                      # 16 px: context
+        self.u8 = conv_block(16 * w, 8 * w)
+        c4 = 8 * w + (2 * r4 + 1) ** 2 + 2 * 2 * w
+        self.u4 = conv_block(c4, 4 * w)
+        self.u2 = conv_block(4 * w + 2 * w, 2 * w)
+        self.u1 = conv_block(2 * w + 10, w)                                # + full-res inputs
+        self.head = nn.Conv2d(w, 3, 3, padding=1)
+        nn.init.normal_(self.head.weight, std=1e-3)
+        nn.init.zeros_(self.head.bias)
+
+    def features(self, x):
+        f1 = self.f1(x - 0.5)
+        f2 = self.f2(f1)
+        f4 = self.f4(f2)
+        return f2, f4, self.f8(f4)
+
+    def forward(self, rs_a, rs_b, T, sync, base):
+        n = rs_a.shape[0]
+        x = synth_inputs(rs_a, rs_b, T, sync, self.rot_k)
+        corr = MotionNet.correlation
+        with torch.autocast(device_type=rs_a.device.type, dtype=torch.float16, enabled=rs_a.is_cuda):
+            a2, a4, a8 = self.features(rs_a)
+            b2, b4, b8 = self.features(rs_b)
+            c8 = corr(a8.float(), b8.float(), self.r8).to(a8.dtype)
+            aux8 = F.adaptive_avg_pool2d(x[:, 6:10], a8.shape[-2:]).to(a8.dtype)   # coords + times at 1/8
+            y8 = self.b8(torch.cat([c8, a8, b8, aux8], 1))
+            y16 = self.b16(y8)
+            y8 = self.u8(torch.cat([up_to(y16, y8), y8], 1))
+            c4 = corr(a4.float(), b4.float(), self.r4).to(a4.dtype)
+            y4 = self.u4(torch.cat([up_to(y8, a4), c4, a4, b4], 1))
+            y2 = self.u2(torch.cat([up_to(y4, a2), a2, b2], 1))
+            y1 = self.u1(torch.cat([up_to(y2, x), x.to(y2.dtype)], 1))
+            out = self.head(y1).float()
+        pred = (rs_a + out).clamp(0, 1)
+        return pred, {"valid_a": torch.ones_like(pred[:, :1])}
+
+
 def valid_from_flow(flow):
     """1 where a backward flow points inside the source image."""
     n, _, h, w = flow.shape
@@ -151,8 +262,11 @@ def predict_pair(model, img_a, img_b, T_ms, sync_ms=0.0, base_px=0.0, rot_k=1, s
     return rs_a, rs_b, pred.float()
 
 
+MODELS = {"refine": RaftUNet, "plain": PlainUNet, "ae": ConvAutoencoder, "corr": CorrSynthNet}
+
+
 def build(mode, **kw):
-    return RaftUNet(**kw) if mode == "refine" else PlainUNet(**kw)
+    return MODELS[mode](**kw)
 
 
 def load_model(path, device="cpu"):
