@@ -27,83 +27,32 @@ sharp photo ──► random crop ──► sample motion ω(t), v(t), readout, 
          rs_a (row readout)   rs_b (column readout, then rot90)   gs_a (t = mid-readout)
 ```
 
-## Training (Colab)
+## Generators (all write the same sample format)
 
-Open `train_colab.ipynb` in Google Colab (GPU runtime). It downloads DIV2K,
-generates the dataset with `config_webcam.json`, and trains three models for
-comparison:
-
-| run | inputs | what the network predicts | purpose |
+| script | scene | dataset | notes |
 |---|---|---|---|
-| `motion_dual` | A + B | 9 camera-motion parameters → exact RS geometry → displacement field → warp of A | **main model** |
-| `motion_single` | A only | same, without camera B | ablation: does camera B help? |
-| `flow_dual` | A + B | dense displacement field (U-Net) | architecture comparison |
+| `synth_rs.py` | photo as a flat static scene, camera motion only | `rs_dataset_256` (stage 1, DIV2K) | exact flow (`--save-corr`); its timing / motion helpers are used by the other generators |
+| `synth_video.py` | 1000 fps recordings (X4K1000FPS): camera **and object** motion | `rs_video_x4k` (main) | row y of A from the frame recorded when row y was read |
+| `synth_video_v2.py` | same, more clips per scene, `--min-disp` drops near-static samples | extended X4K | |
+| `synth_layers.py` | background + cut-out objects at different depths, own motion and spin | layered set (Filip) | real parallax and occlusions, no frame-rate ghosting |
 
-`motion` model (`model.py`, `MotionNet`): a shared feature extractor runs on A
-and on B (rotated back to A's orientation). A **correlation layer** (cost
-volume, as in FlowNet/PWC-Net) measures how A's features match B's under
-shifts of up to ±24 px. A small CNN then regresses the motion over the readout:
-rotation, its change, and translation. The displacement field is computed from
-them by a differentiable version of the generator's geometry. This is the
-same idea as Velocity-Net in Zhuang et al. 2019, extended to two cameras.
+Sample folder: `rs_a.png`, `rs_b.png` (rotated, exactly as camera B outputs it), `gs_a.png` (**target**,
+global shutter at the middle of A's readout), `gs_b.png`, `meta.json` (readout time, sync offset, baseline,
+`b_rot_k`, ...). Loaded by `raft_geom.RSSampleDataset`.
 
-Loss: MSE on the displacement field (px²) + masked L1 on the image.
-`python src/train.py --eval runs/<name>/best.pt` reports PSNR, SSIM, flow error
-(EPE) and inference time, always next to the "no correction" baseline.
+## Models (`raft_unet.py`, trained with `train_unet.py`)
 
-Lessons from debugging (worth a paragraph in the thesis):
-* plain ReLU in the regression head "died" (constant output), so it uses
-  LeakyReLU, and training uses gradient clipping (1.0);
-* an L1 loss on the displacement field kept the network stuck at "zero
-  motion" (the median of symmetric targets); MSE fixed it;
-* the network predicts motion in **pixels** and divides by the known focal
-  length, because the image alone does not reveal the field of view;
-* early fusion (just stacking A and B as channels) did not learn in short
-  tests; the explicit correlation layer is what makes comparing the two
-  cameras learnable.
-
-## Stage 2: refinement U-Net (`--mode refine`)
-
-`RefinePipeline` in `model.py` = the trained MotionNet (frozen) + a U-Net.
-1. MotionNet → 9 motion parameters → global flow for A, and (same motion, B's
-   column readout) for B.
-2. `OffsetHead`: correlation of A and B after that correction → one global
-   (dx, dy) for B (stereo baseline + sync offset, which MotionNet ignores).
-3. U-Net input: warped A, warped B, "outside the frame" maps for A and B,
-   A's global flow, coordinates. Output: local flow corrections for A and B,
-   a blend mask (which camera each pixel comes from) and an image residual.
-4. output = mask · warp(A) + (1 − mask) · warp(B) + residual.
-
-Loss: L1 on the image wherever at least one camera saw the scene, plus a
-small MSE on both flows (ground truth for B comes from `meta.json`, so the
-existing datasets work unchanged). Only the U-Net and OffsetHead are trained.
-The checkpoint contains both networks.
-
-## Local inference (`infer.py`, CPU is fine)
-
-```bash
-pip install torch opencv-python scipy numpy
-python src/infer.py --ckpt refine_best.pt --data dataset/val --n 8 --out results      # synthetic, with metrics
-python src/infer.py --ckpt refine_best.pt --a camA.png --b camB.png --f 620 --out results   # real pair
-python src/infer.py --ckpt refine_best.pt --a framesA/ --b framesB/ --f 620 --out results   # video frames
-```
-For real frames: B is rotated back, both are centre-cropped to the common
-square and resized to 256; `--f` is the focal length in px of the original
-frames (from calibration). Undistort lens distortion first.
-
-## Files
-
-| file | purpose |
+| `--mode` | what it does |
 |---|---|
-| `synth_rs.py` | generator (numpy + OpenCV only) |
-| `preview.py` | contact sheet to eyeball samples |
-| `rs_dataset.py` | PyTorch `Dataset` (aligned inputs, GT flow, visibility mask) |
-| `model.py` | `MotionNet` (correlation + motion regression + geometry) and U-Net (`flow` / `direct`) |
-| `train.py` | training, PSNR/SSIM evaluation, inference timing |
-| `train_colab.ipynb` | end-to-end Colab notebook (stage 1 + stage 2) |
-| `infer.py` | local inference on generated samples or real camera frames |
-| `config_webcam.json` | starting parameters for the USB webcams (no hardware sync) |
-| `config_example.json` | parameter overrides, to tune to your cameras |
+| `refine` | **main model**: RAFT flow A->B, RS geometry (per-pixel velocity `u = (d + b) / Δt`, back to one moment), then a U-Net fixes local errors, blends A and B (border seen only by B) and adds an image residual |
+| `plain` | U-Net on [A, B, coordinates, readout times] -> flow for A + residual; no RAFT, no geometry (baseline) |
+| `ae` | autoencoder without skips, latent 16 x 16 x 512, outputs the image directly |
+| `corr` | siamese encoder + correlation layer A<->B + decoder with skips, outputs A + residual image |
+| `corrgeom` | the `corr` network predicting the flow A->B + fixed RS geometry v1: RAFT + geometry with RAFT replaced by a small network trained from scratch |
+
+`--single` (plain / ae / corr) replaces camera B with a copy of A: the ablation "does camera B help?".
+RAFT + geometry alone: `raft_geom.py`, fine-tuning `train_raft.py`. Shared blocks: `model.py`
+(U-Net, warp, correlation), metrics: `train_common.py`. Stage 1 (MotionNet) was removed: `docs/etap1_motionnet.md`.
 
 ## Quick start (Windows / any OS)
 

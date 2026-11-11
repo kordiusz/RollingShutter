@@ -27,7 +27,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from raft_geom import RaftGeom, RSSampleDataset, load_raft_geom
-from train import masked_l1, psnr, ssim, run_context, dataset_info
+from train_common import masked_l1, psnr, ssim, run_context, dataset_info
 
 
 def to_dev(b, dev):

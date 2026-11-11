@@ -22,13 +22,19 @@ Direct synthesis (no flow, no geometry; "bezpośrednia synteza ramek" from the t
 "ae"   classic autoencoder without skip connections, latent 16 x 16 x 512 (ConvAutoencoder).
 "corr" siamese encoder + correlation layer (cost volume) + decoder with skips (CorrSynthNet).
 Both get A, B, coordinates and readout times; their psnr is over the whole image (= psnr_full).
+
+"corrgeom" the network of "corr" predicting the flow A->B + fixed RS geometry v1 (CorrGeomNet):
+   RAFT + geometry with RAFT replaced by a small network trained from scratch.
+
+single=True (plain / ae / corr): camera B is replaced by a copy of A, so the network gets no second
+moment of readout. Ablation "does camera B help?" with the same architecture (notebook 09_ablacje).
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from model import MotionNet, UNet, conv_block, coord_channels, warp
-from raft_geom import RaftGeom, backward_flow, base_grid, readout_time, velocity_from_flow
+from model import UNet, conv_block, coord_channels, correlation, warp
+from raft_geom import RaftGeom, backward_flow, base_grid, correct_from_flow, readout_time, velocity_from_flow
 
 U_SCALE = 1.0      # velocity [px/ms] is fed to the U-Net as is (typically |u| < 1)
 T_SCALE = 30.0     # readout times [ms] are divided by this (max readout in the datasets)
@@ -96,12 +102,13 @@ class RaftUNet(nn.Module):
 class PlainUNet(nn.Module):
     """Baseline without RAFT and geometry: U-Net on [A, B, coords, readout times] -> flow + residual."""
 
-    def __init__(self, width=32, rot_k=1, flow_scale=10.0):
+    def __init__(self, width=32, rot_k=1, flow_scale=10.0, single=False):
         super().__init__()
         self.unet = UNet(3 + 3 + 2 + 2, 5, tuple(width * m for m in (1, 2, 4, 8)))
-        self.rot_k, self.flow_scale = rot_k, flow_scale
+        self.rot_k, self.flow_scale, self.single = rot_k, flow_scale, single
 
     def forward(self, rs_a, rs_b, T, sync, base):
+        rs_b = rs_a if self.single else rs_b
         n, _, h, w = rs_a.shape
         x = torch.cat([rs_a - 0.5, rs_b - 0.5, coord_channels(n, h, w, rs_a.device),
                        time_maps(n, h, T, sync, self.rot_k, rs_a.device)], 1)
@@ -138,9 +145,9 @@ class ConvAutoencoder(nn.Module):
     no copy of A). Everything the output shows has to pass through the latent, so this is
     the reference "what a bottleneck alone can do": fine texture is expected to blur."""
 
-    def __init__(self, width=32, rot_k=1, latent_ch=512):
+    def __init__(self, width=32, rot_k=1, latent_ch=512, single=False):
         super().__init__()
-        self.rot_k = rot_k
+        self.rot_k, self.single = rot_k, single
         ch = [width, 2 * width, 4 * width, 8 * width, latent_ch]           # 256, 128, 64, 32, 16 px
         self.inc = conv_block(10, ch[0])
         self.enc = nn.ModuleList(down(ch[i], ch[i + 1]) for i in range(4))
@@ -150,6 +157,7 @@ class ConvAutoencoder(nn.Module):
         nn.init.zeros_(self.head.bias)
 
     def forward(self, rs_a, rs_b, T, sync, base):
+        rs_b = rs_a if self.single else rs_b
         x = synth_inputs(rs_a, rs_b, T, sync, self.rot_k)
         with torch.autocast(device_type=rs_a.device.type, dtype=torch.float16, enabled=rs_a.is_cuda):
             z = self.inc(x)
@@ -173,9 +181,11 @@ class CorrSynthNet(nn.Module):
     context. Output = rs_a + residual image: synthesis without any flow / warp / geometry
     (starts as the identity, i.e. the uncorrected input)."""
 
-    def __init__(self, width=32, rot_k=1, r8=4, r4=3):
+    COUT = 3                                                               # residual image
+
+    def __init__(self, width=32, rot_k=1, r8=4, r4=3, single=False):
         super().__init__()
-        self.rot_k, self.r8, self.r4 = rot_k, r8, r4
+        self.rot_k, self.r8, self.r4, self.single = rot_k, r8, r4, single
         w = width
         self.f1 = conv_block(3, w)                                         # 256 (encoder, shared A/B)
         self.f2, self.f4, self.f8 = down(w, w), down(w, 2 * w), down(2 * w, 4 * w)   # 128, 64, 32
@@ -187,7 +197,7 @@ class CorrSynthNet(nn.Module):
         self.u4 = conv_block(c4, 4 * w)
         self.u2 = conv_block(4 * w + 2 * w, 2 * w)
         self.u1 = conv_block(2 * w + 10, w)                                # + full-res inputs
-        self.head = nn.Conv2d(w, 3, 3, padding=1)
+        self.head = nn.Conv2d(w, self.COUT, 3, padding=1)
         nn.init.normal_(self.head.weight, std=1e-3)
         nn.init.zeros_(self.head.bias)
 
@@ -197,10 +207,11 @@ class CorrSynthNet(nn.Module):
         f4 = self.f4(f2)
         return f2, f4, self.f8(f4)
 
-    def forward(self, rs_a, rs_b, T, sync, base):
-        n = rs_a.shape[0]
+    def decode(self, rs_a, rs_b, T, sync):
+        """Encoder + correlation + decoder -> head output (N, COUT, S, S), float32."""
+        rs_b = rs_a if self.single else rs_b
         x = synth_inputs(rs_a, rs_b, T, sync, self.rot_k)
-        corr = MotionNet.correlation
+        corr = correlation
         with torch.autocast(device_type=rs_a.device.type, dtype=torch.float16, enabled=rs_a.is_cuda):
             a2, a4, a8 = self.features(rs_a)
             b2, b4, b8 = self.features(rs_b)
@@ -213,9 +224,31 @@ class CorrSynthNet(nn.Module):
             y4 = self.u4(torch.cat([up_to(y8, a4), c4, a4, b4], 1))
             y2 = self.u2(torch.cat([up_to(y4, a2), a2, b2], 1))
             y1 = self.u1(torch.cat([up_to(y2, x), x.to(y2.dtype)], 1))
-            out = self.head(y1).float()
-        pred = (rs_a + out).clamp(0, 1)
+            return self.head(y1).float()
+
+    def forward(self, rs_a, rs_b, T, sync, base):
+        pred = (rs_a + self.decode(rs_a, rs_b, T, sync)).clamp(0, 1)
         return pred, {"valid_a": torch.ones_like(pred[:, :1])}
+
+
+class CorrGeomNet(CorrSynthNet):
+    """"corrgeom": the network of "corr", but it predicts the flow A->B and the fixed RS geometry
+    (v1, as in RAFT + geometry v1) turns it into the corrected image. No pretrained weights.
+
+    The rung between "corr" (matching, no geometry) and RAFT + geometry (pretrained iterative
+    matching + geometry): if it is much better than "corr", the geometry is the key; if it is
+    close to "corr", it is RAFT's matching. Trained from the image loss only, like RAFT in 04.
+    Starts as "static scene" (flow = -baseline, velocity 0, output = input A)."""
+
+    COUT = 2                                                               # flow A->B
+    FLOW_SCALE = 10.0                                                      # head output * 10 px
+
+    def forward(self, rs_a, rs_b, T, sync, base):
+        d = self.FLOW_SCALE * self.decode(rs_a, rs_b, T, sync)
+        d = d - torch.stack([base, torch.zeros_like(base)], 1).view(-1, 2, 1, 1).to(d)
+        pred, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
+        return pred, {"valid_a": aux["valid"], "loss_mask": aux["valid"], "flow_ab": d,
+                      "velocity": aux["velocity"]}
 
 
 def valid_from_flow(flow):
@@ -224,22 +257,6 @@ def valid_from_flow(flow):
     xs, ys = base_grid(n, h, w, flow.device)
     px, py = xs + flow[:, 0], ys + flow[:, 1]
     return ((px >= 0) & (px <= w - 1) & (py >= 0) & (py <= h - 1)).float()[:, None]
-
-
-class LegacyRSNet(nn.Module):
-    """Stage-1 models of train.py (e.g. flow_dual, trained on the camera-motion set)
-    with the interface of this file, to evaluate them on the video dataset."""
-
-    def __init__(self, net):
-        super().__init__()
-        self.net = net
-
-    def forward(self, rs_a, rs_b, T, sync, base):
-        pred, flow, _ = self.net(rs_a, rs_b, torch.full_like(T, 245.9))   # f: only MotionNet uses it
-        pred = pred.float()
-        if flow is None:
-            return pred, {"valid_a": torch.ones_like(pred[:, :1])}
-        return pred, {"flow_a": flow.float(), "valid_a": valid_from_flow(flow.float())}
 
 
 def image_tensor(im, size=256, device="cpu"):
@@ -262,7 +279,8 @@ def predict_pair(model, img_a, img_b, T_ms, sync_ms=0.0, base_px=0.0, rot_k=1, s
     return rs_a, rs_b, pred.float()
 
 
-MODELS = {"refine": RaftUNet, "plain": PlainUNet, "ae": ConvAutoencoder, "corr": CorrSynthNet}
+MODELS = {"refine": RaftUNet, "plain": PlainUNet, "ae": ConvAutoencoder, "corr": CorrSynthNet,
+          "corrgeom": CorrGeomNet}
 
 
 def build(mode, **kw):
@@ -270,15 +288,8 @@ def build(mode, **kw):
 
 
 def load_model(path, device="cpu"):
-    """Checkpoint of train_unet.py, or of train.py (old models, wrapped in LegacyRSNet)."""
+    """Checkpoint of train_unet.py."""
     ck = torch.load(path, map_location=device)
-    if "mode" in ck:
-        model = build(ck["mode"], **ck["model_args"])
-        model.load_state_dict(ck["model"])
-    else:
-        from model import build_model
-        net = build_model(**ck["model_args"])
-        net.load_state_dict(ck["model"])
-        model = LegacyRSNet(net)
-        ck = dict(ck, mode="legacy_" + ck["model_args"].get("mode", "?"))
+    model = build(ck["mode"], **ck["model_args"])
+    model.load_state_dict(ck["model"])
     return model.to(device).eval(), ck

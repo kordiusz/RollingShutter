@@ -10,6 +10,10 @@
   # direct synthesis: autoencoder without skips / siamese encoder + correlation layer
   python src/train_unet.py --data data/rs_video_x4k --mode ae --epochs 60 --bs 16 --name 2026-11-11_ae
   python src/train_unet.py --data data/rs_video_x4k --mode corr --epochs 60 --bs 16 --name 2026-11-11_corr
+  # small network from scratch predicting the flow A->B + RS geometry (instead of RAFT)
+  python src/train_unet.py --data data/rs_video_x4k --mode corrgeom --epochs 80 --bs 16 --name 2026-11-12_corrgeom
+  # ablation: the same model with camera B replaced by a copy of A
+  python src/train_unet.py --data data/rs_video_x4k --mode corr --single --epochs 80 --bs 16 --name 2026-11-12_corr_single
   # evaluation (+ per-sample metrics for the breakdown by RS strength)
   python src/train_unet.py --data data/rs_video_x4k --eval runs/<run>/best.pt --eval-json eval.json --per-sample val.csv
 
@@ -34,7 +38,7 @@ from torch.utils.data import DataLoader
 
 from raft_geom import RaftGeom, RSSampleDataset
 from raft_unet import build, load_model
-from train import masked_l1, psnr, ssim, run_context, dataset_info
+from train_common import masked_l1, psnr, ssim, run_context, dataset_info
 
 
 def to_dev(b, dev):
@@ -46,6 +50,8 @@ def forward(model, b):
 
 
 def loss_mask(aux, pred):
+    if "loss_mask" in aux:                       # corrgeom: where the geometry's source pixel is inside A
+        return aux["loss_mask"]
     if "valid_b" in aux:
         return torch.maximum(aux["valid_a"], aux["valid_b"])
     return torch.ones_like(pred[:, :1])
@@ -103,7 +109,7 @@ def save_preview(model, batch, dev, path, n=4):
 
 @torch.no_grad()
 def inference_ms(model, dev, size, reps=30):
-    """Pure network time for one pair (no data loading), like train.py."""
+    """Pure network time for one pair (no data loading)."""
     model.eval()
     x = torch.rand(1, 3, size, size, device=dev)
     t = lambda v: torch.full((1,), v, device=dev)
@@ -123,8 +129,11 @@ def inference_ms(model, dev, size, reps=30):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", required=True)
-    ap.add_argument("--mode", default="refine", choices=["refine", "plain", "ae", "corr"],
-                    help="ae / corr: direct synthesis (autoencoder / encoder + correlation), see raft_unet.py")
+    ap.add_argument("--mode", default="refine", choices=["refine", "plain", "ae", "corr", "corrgeom"],
+                    help="ae / corr: direct synthesis (autoencoder / encoder + correlation); "
+                         "corrgeom: corr network -> flow A->B -> RS geometry; see raft_unet.py")
+    ap.add_argument("--single", action="store_true",
+                    help="plain / ae / corr: camera B replaced by a copy of A (ablation: does B help?)")
     ap.add_argument("--raft-ckpt", default=None, help="refine: RAFT from train_raft.py (best.pt); none = pretrained")
     ap.add_argument("--init", default=None, help="start from this checkpoint of train_unet.py (weights only)")
     ap.add_argument("--raft-lr", type=float, default=0.0, help="refine: > 0 also fine-tunes RAFT with this lr")
@@ -141,6 +150,8 @@ def main():
     ap.add_argument("--eval-json", default=None)
     ap.add_argument("--per-sample", default=None, help="eval: CSV with metrics of every val sample")
     a = ap.parse_args()
+    if a.single and a.mode in ("refine", "corrgeom"):
+        ap.error("--single works with plain / ae / corr (the geometry needs camera B)")
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -174,7 +185,7 @@ def main():
         print("saved", ej, "and", prev)
         return
 
-    name = a.name or {"refine": "raft_unet", "plain": "unet_plain"}.get(a.mode, a.mode)
+    name = a.name or {"refine": "raft_unet", "plain": "unet_plain"}.get(a.mode, a.mode) + ("_single" if a.single else "")
     run = Path(a.out) / name
     run.mkdir(parents=True, exist_ok=True)
     train_ds = RSSampleDataset(Path(a.data) / "train", limit=a.limit)
@@ -194,7 +205,7 @@ def main():
             raft_sd = RaftGeom(ra["size"], pretrained=True).raft.state_dict()
         model.geom.raft.load_state_dict(raft_sd)
     else:
-        model_args = dict(width=a.width, rot_k=rot_k)
+        model_args = dict(width=a.width, rot_k=rot_k, single=a.single)
         model = build(a.mode, **model_args)
     if a.init:
         model.load_state_dict(torch.load(a.init, map_location="cpu")["model"])

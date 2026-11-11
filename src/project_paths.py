@@ -1,11 +1,11 @@
 """Where things live on Google Drive (used by the notebooks on the Colab runtime).
 
 Layout (MyDrive/rs_project/):
-  datasets/rs_dataset_256.zip      generated dataset (+ datasets/<name>_config.json)
+  datasets/<name>.zip              generated datasets (rs_video_x4k.zip, ...)
   runs/<YYYY-MM-DD>_<name>/        one folder per training run:
                                    best.pt, last.pt, log.csv, run_info.json,
                                    results.json, eval.json, preview_epXX.png
-  results/<run>/                   inference outputs (infer.py)
+  results/<run>/                   demo outputs
   .github_token                    optional: GitHub token for cloning the repo
 
 Older runs (before 2026-10-24) were in MyDrive/rs_runs/<name> and the dataset in
@@ -69,7 +69,7 @@ def status():
     for z in zips:
         print(f"  {z}  ({z.stat().st_size / 1e9:.2f} GB)")
     if not zips:
-        print("  BRAK - uruchom 01_dataset.ipynb")
+        print("  BRAK - wgraj spakowany zbiór do", DATASETS)
     runs = sorted(p for p in RUNS.iterdir() if p.is_dir())
     print(f"runs ({RUNS}):")
     for r in runs:
