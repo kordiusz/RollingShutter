@@ -34,12 +34,12 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
 | 2026-11-11_unet_plain_long | 2026-11-11 | zwykły U-Net od zera, jak 2026-11-03_unet_plain, ale 200 epok | rs_video_x4k | 08_synteza | L4 | 200 | 31.05 | 0.895 | – | – | 3.8 | 2.7 M | psnr_full 30.94; najlepsza ep. 149, plateau od ok. ep. 100 (30,9–31,05); 21 s/ep.; strata treningowa 0,0113 (niższa niż corr przy tym samym val) |
 | 2026-11-11_ae | 2026-11-11 | autoenkoder bez skipów (latent 16×16×512), synteza obrazu wprost | rs_video_x4k | 08_synteza | L4 | 60 | 23.27 | 0.681 | – | – | 3.9 | 10.2 M | `psnr` = cały obraz; **gorzej niż wejście (26,35)**: wąskie gardło rozmywa obraz; 19 s/ep. |
 | 2026-11-11_corr | 2026-11-11 | syjamski enkoder + korelacja A↔B + dekoder ze skipami, synteza wprost (A + poprawka) | rs_video_x4k | 08_synteza | L4 | 80 | 31.06 | 0.887 | – | – | 10.7 | 6.2 M | `psnr` = cały obraz (wejście 26,35); szybki wzrost w ep. 26–45, od ep. 60 +0,1 dB (koniec OneCycle); bez przeuczenia |
-| *_unet_plain_single | planowany | ablacja: zwykły U-Net, kamera B zastąpiona kopią A (`--single`) | rs_video_x4k | 09_ablacje | L4 | 30 | | | – | | | 2.7 M | porównanie z 2026-11-03_unet_plain |
-| *_corr_single | planowany | ablacja: `corr`, kamera B zastąpiona kopią A | rs_video_x4k | 09_ablacje | L4 | 80 | | | – | | | 6.2 M | porównanie z *_corr |
-| *_corr200 | planowany | jak *_corr, 200 epok (równe epoki w głównym porównaniu architektur) | rs_video_x4k | kopia 08 | L4 | 200 | | | – | | | 6.2 M | |
+| *_unet_plain_single | planowany | ablacja: zwykły U-Net, kamera B zastąpiona kopią A (`--single`) | rs_video_x4k | 09_ablacje | L4 | 200 | | | – | | | 2.7 M | porównanie z 2026-11-11_unet_plain_long |
+| *_corr_single | planowany | ablacja: `corr`, kamera B zastąpiona kopią A | rs_video_x4k | 09_ablacje | L4 | 200 | | | – | | | 6.2 M | porównanie z *_corr200 |
+| *_corr200 | planowany | jak *_corr, 200 epok (równe epoki w głównym porównaniu architektur) | rs_video_x4k | 09_ablacje (albo kopia 08) | L4 | 200 | | | – | | | 6.2 M | |
 | *_corrgeom | planowany | sieć z `corr` (od zera) przewiduje przesunięcie A→B + geometria v1 | rs_video_x4k | 09_ablacje | L4 | 200 | | | – | | | 6.2 M | szczebel między `corr` a RAFT + geometrią v1 (34,30) |
-| *_unet_plain_lr1e-4, *_lr1e-3 | opcjonalny | kontrola: zwykły U-Net z innym lr (domyślnie 3e-4) | rs_video_x4k | 09_ablacje | L4 | 30 | | | – | | | 2.7 M | czy wynik zależy od lr |
-| *_corr_w64 | opcjonalny | kontrola: `corr` z width 64 (~4× wag) | rs_video_x4k | 09_ablacje | L4 | 80 | | | – | | | ~25 M | czy sufit ~30 dB to rozmiar sieci, czy brak geometrii |
+| *_unet_plain_lr1e-4, *_lr1e-3 | opcjonalny | kontrola: zwykły U-Net z innym lr (domyślnie 3e-4) | rs_video_x4k | 09_ablacje | L4 | 200 | | | – | | | 2.7 M | czy wynik zależy od lr |
+| *_corr_w64 | opcjonalny | kontrola: `corr` z width 64 (~4× wag) | rs_video_x4k | 09_ablacje | L4 | 200 | | | – | | | ~25 M | czy sufit ~30 dB to rozmiar sieci, czy brak geometrii |
 | *_refine_dual | porzucony | 2 / MotionNet (zamrożony) + U-Net | rs_dataset_256 | (usunięty, etap 1) | – | – | | | | | | | zastąpiony przez RAFT + geometria + U-Net (05) |
 
 \* `ms_per_pair` w `train_raft.py` = czas całej ewaluacji / liczba par (z wczytywaniem danych i metrykami), nie czysty czas sieci. W `train_unet.py` (runy `*_raft_unet*`) `ms_per_pair` to czysty czas sieci dla jednej pary.
@@ -64,3 +64,5 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
   rozmycie przez wąskie gardło), zwykły U-Net 200 epok 30,94 dB (30 epok: 28,41), enkoder + korelacja 80 epok 31,06 dB.
   Modele ze skipami zatrzymują się ok. 31 dB, poniżej RAFT + geometrii bez żadnego uczenia (32,86). `corr` osiąga to w 80 epokach,
   U-Net potrzebuje ~100; U-Net ma wyższy SSIM (0,895 vs 0,887), bo przesuwa piksele A (ostry obraz), a `corr` je domalowuje.
+- 2026-11-11: zasada dla modeli uczonych od zera (U-Net, `ae`, `corr`, `corrgeom`, ablacje, testy kontrolne): **200 epok**,
+  bs 16, lr 3e-4, OneCycle. Wcześniejsze runy 30 / 60 / 80 epok zostają jako dodatkowe punkty (pokazują, ile daje dłuższy trening).
