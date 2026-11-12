@@ -14,6 +14,8 @@
   python src/train_unet.py --data data/rs_video_x4k --mode corrgeom --epochs 80 --bs 16 --name 2026-11-12_corrgeom
   # ablation: the same model with camera B replaced by a copy of A
   python src/train_unet.py --data data/rs_video_x4k --mode corr --single --epochs 80 --bs 16 --name 2026-11-12_corr_single
+  # several datasets at once: all train/ splits together, validation (best.pt) on the first one's val/
+  python src/train_unet.py --data data/rs_video_x4k data/rs_layers --mode refine ... --name 2026-11-12_raft_unet_mix
   # evaluation (+ per-sample metrics for the breakdown by RS strength)
   python src/train_unet.py --data data/rs_video_x4k --eval runs/<run>/best.pt --eval-json eval.json --per-sample val.csv
 
@@ -34,7 +36,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 
 from raft_geom import RaftGeom, RSSampleDataset
 from raft_unet import build, load_model
@@ -128,7 +130,9 @@ def inference_ms(model, dev, size, reps=30):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--data", required=True)
+    ap.add_argument("--data", required=True, nargs="+",
+                    help="dataset folder(s) with train/ and val/. Several: training uses all train/ splits together, "
+                         "validation (log.csv, best.pt) only the FIRST folder's val/ (others: evaluate with --eval)")
     ap.add_argument("--mode", default="refine", choices=["refine", "plain", "ae", "corr", "corrgeom"],
                     help="ae / corr: direct synthesis (autoencoder / encoder + correlation); "
                          "corrgeom: corr network -> flow A->B -> RS geometry; see raft_unet.py")
@@ -152,12 +156,15 @@ def main():
     a = ap.parse_args()
     if a.single and a.mode in ("refine", "corrgeom"):
         ap.error("--single works with plain / ae / corr (the geometry needs camera B)")
+    if a.eval and len(a.data) > 1:
+        ap.error("--eval takes one --data folder (run it once per dataset)")
+    data0 = Path(a.data[0])
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     print("device:", dev)
-    val_ds = RSSampleDataset(Path(a.data) / "val", limit=a.limit)
+    val_ds = RSSampleDataset(data0 / "val", limit=a.limit)
     rot_k = int(val_ds[0]["rot_k"])
     val_dl = DataLoader(val_ds, batch_size=a.bs, shuffle=False, num_workers=a.workers)
     preview = next(iter(DataLoader(val_ds, batch_size=4)))
@@ -175,7 +182,7 @@ def main():
         ej = Path(a.eval_json) if a.eval_json else Path(a.eval).parent / "eval.json"
         prev = ej.with_name(ej.stem + "_preview.png")      # next to the JSON: old runs are not overwritten
         save_preview(model, preview, dev, prev)
-        out = {"checkpoint": a.eval, "mode": ck["mode"], "data": str(Path(a.data) / "val"), "metrics": r,
+        out = {"checkpoint": a.eval, "mode": ck["mode"], "data": str(data0 / "val"), "metrics": r,
                **run_context(dev)}
         ej.write_text(json.dumps(out, indent=1))
         if a.per_sample:
@@ -188,7 +195,11 @@ def main():
     name = a.name or {"refine": "raft_unet", "plain": "unet_plain"}.get(a.mode, a.mode) + ("_single" if a.single else "")
     run = Path(a.out) / name
     run.mkdir(parents=True, exist_ok=True)
-    train_ds = RSSampleDataset(Path(a.data) / "train", limit=a.limit)
+    train_parts = [RSSampleDataset(Path(d) / "train", limit=a.limit) for d in a.data]
+    for d, part in zip(a.data, train_parts):
+        if int(part[0]["rot_k"]) != rot_k or part[0]["rs_a"].shape[-1] != size:
+            raise RuntimeError(f"{d}: rot_k / image size differ from {data0} (cannot train on both)")
+    train_ds = train_parts[0] if len(train_parts) == 1 else ConcatDataset(train_parts)
     train_dl = DataLoader(train_ds, batch_size=a.bs, shuffle=True, num_workers=a.workers, drop_last=True,
                           pin_memory=dev.type == "cuda", persistent_workers=a.workers > 0)
 
@@ -231,7 +242,10 @@ def main():
           f"{len(train_ds)} train / {len(val_ds)} val samples")
     info = {"name": name, "mode": a.mode, "command_args": vars(a), "model_args": model_args,
             "params_M": n_par, "trainable_M": n_tr, "n_train": len(train_ds), "n_val": len(val_ds),
-            "dataset": dataset_info(a.data), **run_context(dev)}
+            "dataset": dataset_info(data0), **run_context(dev)}
+    if len(a.data) > 1:     # several training sets: what each one contributed; validation = val/ of the first
+        info["datasets"] = [{**dataset_info(d), "n_train": len(p)} for d, p in zip(a.data, train_parts)]
+        info["val_from"] = str(data0 / "val")
     (run / "run_info.json").write_text(json.dumps(info, indent=1, default=str))
 
     log = open(run / "log.csv", "a", newline="")

@@ -38,6 +38,8 @@ Wszystkie liczby: val `rs_video_x4k` (321 próbek ze scen spoza treningu), wejś
 | `08_synteza` | synteza obrazu bez geometrii: zwykły U-Net 200 epok, autoenkoder `ae`, enkoder + korelacja `corr` | zbiór | `<data>_unet_plain_long`, `<data>_ae`, `<data>_corr` | ~70 / ~20 / ~50 min | 30,94 / 23,27 / 31,06 dB (psnr_full) |
 | `09_ablacje` | ablacje, wszystko po 200 epok: zwykły U-Net i `corr` z kopią A zamiast B; `corr` 200 epok (para); korelacja + geometria (`corrgeom`: sieć z `corr` przewiduje przesunięcie A→B, dalej nasza geometria); opcjonalnie testy lr i rozmiaru sieci | `*_unet_plain_long` z 08, runy z 04 | `<data>_unet_plain_single`, `<data>_corr200`, `<data>_corr_single`, `<data>_corrgeom`; opcjonalnie `<data>_unet_plain_lr1e-4`, `_lr1e-3`, `<data>_corr_w64` | ~70 min / ~2 h / ~2 h / ~2,5 h | do zrobienia |
 
+| `10_mix_layers` (gałąź `filip-layers`) | trening na sumie `rs_video_x4k` + `rs_layers` (`train_unet.py --data X4K LAYERS`, val X4K), potem każdy model (stary i nowy) oceniany na val X4K i val warstwowym, z podziałem na tekstury | `rs_layers.rar` (albo `.zip`), RAFT z 07 | `<data>_raft_unet_mix`, `<data>_raft_unet_ft_mix`; opcjonalnie `<data>_unet_plain_mix`, `<data>_corr_mix` | ~1,5 + 1,2 h | do zrobienia |
+
 Kolejność, gdy zaczynasz od zera na nowym zbiorze: **04 → 07 → 05** (każdy bierze RAFT z poprzedniego), a 06, 08, 09
 niezależnie, w dowolnej kolejności i równolegle. Etap 1 (MotionNet, sam ruch kamery) został usunięty:
 opis i wyniki w `docs/etap1_motionnet.md`.
