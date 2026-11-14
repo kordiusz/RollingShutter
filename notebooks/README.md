@@ -37,6 +37,7 @@ Wszystkie liczby: val `rs_video_x4k` (321 próbek ze scen spoza treningu), wejś
 | `06_unet_plain` | zwykły U-Net bez RAFT i geometrii, 30 epok (punkt odniesienia) | zbiór | `<data>_unet_plain` | ~11 min | 28,5 dB |
 | `08_synteza` | synteza obrazu bez geometrii: zwykły U-Net 200 epok, autoenkoder `ae`, enkoder + korelacja `corr` | zbiór | `<data>_unet_plain_long`, `<data>_ae`, `<data>_corr` | ~70 / ~20 / ~50 min | 30,94 / 23,27 / 31,06 dB (psnr_full) |
 | `09_ablacje` | ablacje **bez treningu**: kamera B (zwykły U-Net A + B kontra tylko A, oba 200 ep.; zysk z kamery B w funkcji różnicy chwil odczytu abs(t_B − t_A)), geometria (zestawienie istniejących runów) | `*_unet_plain_long`, `*_unet_plain_single`, runy z 04, 05, 08 | – (wyniki w `results/ablacja_kamery_b/`) | kilka min, wystarczy CPU | U-Net: 30,94 z B / 26,51 bez B (psnr_full) |
+| `11_tabela_glowna` | **tabela główna bez treningu**: wszystkie metody tą samą miarą (psnr_full, ssim_full), CI po scenach, różnice sparowane względem modelu głównego, ms/parę jedną metodą, parametry i kroki treningu; nowe punkty odniesienia: samo B, średnia A+B, DIS / Farnebäck + geometria | runy z 04, 05, 07, 08, 09 | – (wyniki w `results/tabela_glowna/`) | ~15–25 min GPU | DIS + geometria v1: 33,44 dB psnr_full bez uczenia |
 
 Kolejność, gdy zaczynasz od zera na nowym zbiorze: **04 → 07 → 05** (każdy bierze RAFT z poprzedniego), a 06, 08, 09
 niezależnie, w dowolnej kolejności i równolegle. Etap 1 (MotionNet, sam ruch kamery) został usunięty:

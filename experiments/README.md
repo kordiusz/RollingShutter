@@ -28,6 +28,10 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
 | 2026-11-03_unet_plain | 2026-11-03 | zwykły U-Net (A, B, czasy odczytu → przepływ + residuum), bez RAFT | rs_video_x4k | 06_unet_plain | L4 | 30 | 28.45 | 0.845 | – | – | (3.9)* | 2.7 M | punkt odniesienia: bez RAFT i geometrii +2 dB |
 | (eval) raft_zeroshot, geometria v2 | 2026-11-03 | RAFT (gotowe wagi) + geometria v2 (krawędzie obiektów, dziury z kamery B) | rs_video_x4k | 07_demo_v2 | L4 | 0 | 33.25 | 0.937 | – | – | (32.0)* | 5.3 M | RAFT liczony A→B i B→A |
 | (eval) 2026-10-24_raft_geom, geometria v2 | 2026-11-03 | RAFT dostrojony z v1 + geometria v2 | rs_video_x4k | 07_demo_v2 | L4 | – | 34.39 | 0.941 | – | – | (32.0)* | 5.3 M | |
+| (eval) Farnebäck + geometria v1 | 2026-11-14 | klasyczny przepływ OpenCV (bez uczenia) + geometria v1 | rs_video_x4k | 11_tabela_glowna | CPU | 0 | 32.28 | 0.910 | – | – | 221 (CPU) | – | psnr_full 31.84 (CI95 po scenach [29,72; 33,70]) |
+| (eval) DIS + geometria v1 | 2026-11-14 | klasyczny przepływ OpenCV DIS (preset MEDIUM, bez strojenia) + geometria v1 | rs_video_x4k | 11_tabela_glowna | CPU | 0 | **34.10** | 0.934 | – | – | 240 (CPU) | – | **psnr_full 33.44** [31,23; 35,34]: bez uczenia i pretreningu, lepiej niż RAFT gotowy (32,86) i każda sieć bez geometrii |
+| (eval) DIS + geometria v2 | 2026-11-14 | jw., geometria v2 (DIS A→B i B→A) | rs_video_x4k | 11_tabela_glowna | CPU | 0 | 34.04 | 0.935 | – | – | 713 (CPU) | – | psnr_full 33.45: v2 nic nie dodaje przy DIS |
+| (eval) samo B / średnia A+B | 2026-11-14 | trywialne punkty odniesienia | rs_video_x4k | 11_tabela_glowna | CPU | 0 | – | 0.575 / 0.740 | – | – | – | – | psnr_full 19.50 / 23.47 (wejście A 26.35) |
 | 2026-11-03_raft_geom_v2 | 2026-11-03 | RAFT dostrajany dalej z geometrią v2 (`--init` z 2026-10-24_raft_geom) | rs_video_x4k | 07_demo_v2 | L4 | 5 | 34.46 | 0.941 | – | – | – | 5.3 M | lr 1e-5, bs 8, 219 s/epokę; prawie bez zysku (+0,07 dB) |
 | 2026-11-08_raft_unet | 2026-11-08 | RAFT (zamrożony, wagi z 2026-11-03_raft_geom_v2) + geometria v1 + U-Net refine | rs_video_x4k | 05_unet | L4 | 30 | 35.68 | 0.955 | – | – | 51.6 | 8.0 M (2.7 M uczone) | lr 3e-4, bs 8, 56 s/epokę; sam etap RAFT + geometria w tym modelu 34.36; psnr_full 35.24; kod `d70c697` |
 | 2026-11-08_raft_unet_ft | 2026-11-08 | jw., wspólne dostrajanie RAFT + U-Net (`--init` z 2026-11-08_raft_unet) | rs_video_x4k | 05_unet | L4 | 10 | **35.81** | **0.955** | – | – | 52.6 | 8.0 M | RAFT lr 1e-5, U-Net lr 1e-4, 126 s/epokę; +0,14 dB; psnr_full 35.37; waga B w masce 0.41 |
@@ -83,3 +87,15 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
   (3) Zwykły U-Net z tego nie korzysta: jego zysk z B lekko maleje z różnicą czasów (korelacja po położeniu −0,56), a mapa
   zysku zależy od wiersza (od |t_A|), nie od przekątnej. Traktuje B jako drugi, inaczej zniekształcony widok sceny, a nie jako
   pomiar ruchu w czasie: to tłumaczy, czemu modele bez geometrii stoją na ~31 dB. Rysunek: `results/ablacja_kamery_b/zysk_z_kamery_b.png`.
+- 2026-11-14: niezależna recenzja (agent) + tabela główna (`src/main_table.py`, notatnik 11):
+  * **Klasyczny przepływ DIS (OpenCV, bez uczenia) + nasza geometria: 33,44 dB psnr_full** (34,10 psnr): więcej niż RAFT gotowy
+    (32,86 psnr) i każda sieć bez geometrii (≤ 31,06), prawie tyle co RAFT dostrojony (34,30 psnr). Argument „liczy się geometria”
+    nie zależy więc od pretreningu RAFT; zastępuje nieudany `corrgeom` i własną sieć przepływu.
+  * **Jedna miara:** `train_raft.py` liczył tylko psnr na obszarze widocznym w A, sieci bez geometrii psnr_full; tabela główna
+    (notatnik 11) liczy wszystko tak samo (psnr_full, ssim_full, średnia po obrazach).
+  * **Niepewność:** val = 13 scen × ~27 próbek; CI po scenach dla modelu głównego [33,9; 37,3] (po próbkach złudne ±0,45).
+    Raportować różnice sparowane: U-Net w modelu głównym nad RAFT + geometrią +1,45 dB, CI [1,28; 1,65], lepiej w 303/321.
+  * Do opisania w ograniczeniach: brak osobnego zbioru testowego (best.pt wybierany na val), szum tylko na wejściu RS (cel czysty:
+    część zysku U-Netu może być odszumianiem; największy zysk w klasie „słaby RS”), sufit ~36 dB przy dokładnym przepływie był
+    liczony na innym zbiorze, nierówne budżety treningu (tabela kroków w notatniku 11), PSNR w analizie kamery B liczony z MSE
+    zsumowanego po pikselach (nieporównywalny wprost z tabelą główną).
