@@ -51,6 +51,40 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
 
 \* `ms_per_pair` w `train_raft.py` = czas całej ewaluacji / liczba par (z wczytywaniem danych i metrykami), nie czysty czas sieci. W `train_unet.py` (runy `*_raft_unet*`) `ms_per_pair` to czysty czas sieci dla jednej pary.
 
+## Tabela główna (14.11, notatnik 11, `src/main_table.py`)
+
+Val `rs_video_x4k` (321 próbek, 13 scen spoza treningu), jedna miara dla wszystkich metod: **psnr_full / ssim_full = cały
+obraz, średnia po obrazach**. `psnr_vis` = obszar widoczny w A (dawna kolumna „PSNR” dla RAFT i modeli z 05), tylko dla
+porównania ze starszymi wierszami. CI95 = bootstrap po scenach. Różnica = sparowana (te same próbki) względem modelu głównego
+(`2026-11-08_raft_unet_ft`), „lepsza w” = w ilu próbkach metoda bije model główny. ms/parę: mediana 20 przebiegów jednej pary
+(sama metoda); metody klasyczne na CPU (OpenCV + geometria w PyTorch), reszta na L4, więc czasy CPU i GPU nie są porównywalne
+wprost. Kroki = epoki × (próbki / bs) danego runu, bez wcześniejszych etapów (patrz uwagi).
+
+| grupa | metoda | psnr_full [dB] | CI95 (sceny) | ssim_full | psnr_vis | różnica vs model główny [dB] (CI95) | lepsza w | ms/parę | param. [M] | kroki |
+|---|---|---|---|---|---|---|---|---|---|---|
+| trywialne | bez korekcji (obraz A) | 26,35 | [23,51; 28,96] | 0,797 | 26,35 | −9,02 [−10,84; −7,32] | 8/321 | – | – | – |
+| trywialne | sam obraz B | 19,50 | [18,59; 20,52] | 0,575 | 19,50 | −15,87 [−17,00; −14,24] | 0/321 | – | – | – |
+| trywialne | średnia A i B | 23,47 | [22,06; 24,85] | 0,740 | 23,47 | −11,90 [−12,79; −10,57] | 0/321 | – | – | – |
+| przepływ klasyczny + geometria | Farnebäck + geometria v1 | 31,84 | [29,72; 33,70] | 0,910 | 32,28 | −3,53 [−4,29; −2,82] | 17/321 | 194 (CPU) | – | 0 |
+| przepływ klasyczny + geometria | **DIS + geometria v1** | **33,44** | [31,23; 35,33] | 0,935 | 34,10 | −1,93 [−2,40; −1,52] | 41/321 | 179 (CPU) | – | 0 |
+| przepływ klasyczny + geometria | DIS + geometria v2 | 33,45 | [31,31; 35,31] | 0,935 | 34,03 | −1,92 [−2,44; −1,50] | 34/321 | 547 (CPU) | – | 0 |
+| RAFT + geometria | RAFT gotowy + geometria v1 | 32,34 | [30,42; 34,05] | 0,933 | 32,86 | −3,03 [−3,59; −2,57] | 4/321 | 48 | 5,26 | 0 (pretrening zewn.) |
+| RAFT + geometria | RAFT gotowy + geometria v2 | 32,81 | [30,94; 34,44] | 0,936 | 33,25 | −2,56 [−2,97; −2,19] | 7/321 | 59 | 5,26 | 0 (pretrening zewn.) |
+| RAFT + geometria | RAFT dostrojony (04) + geometria v1 | 33,60 | [31,58; 35,33] | 0,938 | 34,30 | −1,77 [−2,00; −1,56] | 15/321 | 48 | 5,26 | 2 990 |
+| RAFT + geometria | RAFT dostrojony z v2 (07) + geometria v2 | 33,89 | [31,93; 35,54] | 0,940 | 34,46 | −1,48 [−1,68; −1,32] | 17/321 | 60 | 5,26 | 1 495 (+2 990) |
+| sieci bez geometrii | autoenkoder bez skipów (ae), 60 ep. | 23,27 | [22,20; 24,31] | 0,681 | 23,27 | −12,09 [−13,26; −10,51] | 0/321 | 4,4 | 10,2 | 8 940 |
+| sieci bez geometrii | zwykły U-Net, 30 ep. | 28,42 | [26,01; 30,52] | 0,846 | 28,45 | −6,95 [−8,36; −5,65] | 9/321 | 4,3 | 2,72 | 4 470 |
+| sieci bez geometrii | zwykły U-Net, 200 ep. | 30,94 | [28,40; 33,17] | 0,895 | 31,05 | −4,42 [−5,64; −3,43] | 19/321 | 4,3 | 2,72 | 29 800 |
+| sieci bez geometrii | enkoder + korelacja (corr), 80 ep. | 31,06 | [28,63; 33,25] | 0,887 | 31,06 | −4,31 [−5,53; −3,22] | 14/321 | 11,3 | 6,24 | 11 920 |
+| ablacja: bez kamery B | zwykły U-Net bez kamery B, 200 ep. | 26,51 | [23,79; 29,04] | 0,810 | 26,53 | −8,86 [−10,59; −7,24] | 6/321 | 4,2 | 2,72 | 29 800 |
+| RAFT + geometria + U-Net | RAFT (zamrożony) + geometria + U-Net | 35,24 | [33,29; 36,91] | 0,953 | 35,68 | −0,13 [−0,16; −0,10] | 73/321 | 56 | 7,98 | 8 970 (+4 485 RAFT) |
+| RAFT + geometria + U-Net | **RAFT + geometria + U-Net, wspólnie dostrojone (model główny)** | **35,37** | [33,41; 37,04] | **0,954** | 35,81 | – | – | 56 | 7,98 | 2 990 (+8 970 +4 485) |
+
+Uwagi: `psnr_vis` zgadza się z wcześniejszymi wpisami (sprawdzone dla wszystkich runów; `corr` 31,062 zamiast 31,064, bo
+liczony teraz w bf16). Wariant v1/v2 dotyczy geometrii przy ocenie; U-Net w modelu głównym używa geometrii v1. Kroki RAFT:
+04 (2 990) + 07 (1 495) przed U-Netem, do tego pretrening torchvision. Pliki: `MyDrive/rs_project/results/tabela_glowna/`
+(`tabela_glowna.csv`, `per_sample/<metoda>.csv`, `methods.json`).
+
 ## Wnioski na bieżąco
 - 2026-10-13: kamera B jest kluczowa (+8,9 dB z B vs +0,2 dB bez niej). Pozostały błąd MotionNet to głównie
   brzegi, które wyszły poza kadr A (rysunek `docs/rysunki/analiza_bledu_motion_dual.png`), stąd etap 2.
@@ -99,3 +133,15 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
     część zysku U-Netu może być odszumianiem; największy zysk w klasie „słaby RS”), sufit ~36 dB przy dokładnym przepływie był
     liczony na innym zbiorze, nierówne budżety treningu (tabela kroków w notatniku 11), PSNR w analizie kamery B liczony z MSE
     zsumowanego po pikselach (nieporównywalny wprost z tabelą główną).
+- 2026-11-14: tabela główna (jedna miara, psnr_full; CI po scenach, różnice sparowane względem modelu głównego):
+  * **Hierarchia jest pewna mimo 13 scen**: wszystkie różnice względem modelu głównego mają CI95 z dala od zera. Model główny
+    35,37 dB; bez U-Netu (najlepsza sama geometria, RAFT z v2) −1,48 [−1,68; −1,32]; DIS + geometria −1,93; najlepsza sieć
+    bez geometrii (`corr`) −4,31 [−5,53; −3,22]; bez kamery B −8,86.
+  * **Geometria jest kluczem, nie pretrening RAFT**: DIS + geometria (33,44) > RAFT gotowy + geometria (32,34 v1 / 32,81 v2)
+    i tylko o 0,16 dB < RAFT dostrojony + v1 (33,60). Każdy przepływ + geometria (≥ 31,84) jest na poziomie lub powyżej
+    najlepszej sieci bez geometrii (31,06 przy 11 920 krokach; zwykły U-Net 30,94 przy 29 800).
+  * Geometria v2 daje +0,47 przy RAFT gotowym i 0 przy DIS (RAFT z 07 + v2 kontra RAFT z 04 + v1: +0,29, ale tam zmieniają
+    się też wagi RAFT, więc to nie jest czysty efekt geometrii). Wspólne dostrajanie RAFT + U-Net: +0,13
+    [0,10; 0,16], lepiej w 248/321.
+  * Czas (L4): sieci bez geometrii 4–11 ms, RAFT + geometria 48–60 ms, model główny 56 ms (RAFT large 12 iteracji dominuje).
+    DIS + geometria na CPU 179 ms (głównie geometria w PyTorch na CPU, nie sam DIS); do sprawdzenia na GPU, jeśli czas ma być argumentem.
