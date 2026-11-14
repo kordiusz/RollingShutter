@@ -69,3 +69,17 @@ Etap 1 (MotionNet, `rs_dataset_256`): kod i notatniki usunięte 11.11, opis i wy
   U-Net potrzebuje ~100; U-Net ma wyższy SSIM (0,895 vs 0,887), bo przesuwa piksele A (ostry obraz), a `corr` je domalowuje.
 - 2026-11-11: zasada dla modeli uczonych od zera (U-Net, `ae`, `corr`, `corrgeom`, ablacje, testy kontrolne): **200 epok**,
   bs 16, lr 3e-4, OneCycle. Wcześniejsze runy 30 / 60 / 80 epok zostają jako dodatkowe punkty (pokazują, ile daje dłuższy trening).
+- 2026-11-14: ablacja kamery B (notatnik 09, bez treningu, val `rs_video_x4k`, piksele z |t_A| >= 5 ms, zysk względem wejścia):
+  | abs(t_B − t_A) | ~1 ms | ~3 | ~5 | ~7,5 | ~10,5 | ~14 | ~18 | ~25,5 |
+  |---|---|---|---|---|---|---|---|---|
+  | zwykły U-Net, tylko A | +0,31 | +0,30 | +0,31 | +0,31 | +0,31 | +0,30 | +0,33 | +0,29 |
+  | zwykły U-Net, A + B | +5,15 | +5,61 | +5,66 | +4,85 | +4,59 | +4,02 | +3,93 | +3,67 |
+  | RAFT + geometria + U-Net (2026-11-08_raft_unet_ft) | +6,82 | +8,22 | +11,48 | +13,56 | +13,79 | +11,69 | +11,82 | +11,53 |
+
+  (1) Bez kamery B sieć nie poprawia niczego (+0,3 dB w każdym przedziale), z B +3,7 do +5,7 dB: B jest konieczna.
+  (2) **Model z geometrią korzysta z różnicy chwil odczytu**: zysk rośnie z +6,8 dB tam, gdzie obie kamery czytają piksel
+  prawie jednocześnie, do +13,6–13,8 dB przy 7,5–10,5 ms różnicy (prędkość = przesunięcie / (t_B − t_A)); przy t_B ≈ t_A
+  prędkość jest nieokreślona i geometria uzupełnia ją z sąsiedztwa. Pomiar potwierdza zasadę prostopadłego odczytu.
+  (3) Zwykły U-Net z tego nie korzysta: jego zysk z B lekko maleje z różnicą czasów (korelacja po położeniu −0,56), a mapa
+  zysku zależy od wiersza (od |t_A|), nie od przekątnej. Traktuje B jako drugi, inaczej zniekształcony widok sceny, a nie jako
+  pomiar ruchu w czasie: to tłumaczy, czemu modele bez geometrii stoją na ~31 dB. Rysunek: `results/ablacja_kamery_b/zysk_z_kamery_b.png`.
