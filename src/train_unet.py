@@ -246,6 +246,7 @@ def main():
         wr.writerow([0, "", r0["psnr"], r0["ssim"], r0["psnr_full"], r0.get("psnr_geom", ""),
                      r0.get("ssim_geom", ""), r0["psnr_in"], r0["ssim_in"], r0.get("blend_b", ""), 0])
 
+    frozen, last_full = 0, math.nan
     for ep in range(start, a.epochs):
         model.train()
         t0, tot, nb, skipped = time.time(), 0.0, 0, 0
@@ -288,6 +289,14 @@ def main():
         if skipped > nb // 2:   # the weights no longer change: stop instead of burning GPU time
             raise SystemExit(f"STOP: {skipped}/{nb} optimizer steps skipped in epoch {ep + 1} "
                              f"(non-finite gradients), training is stuck. Last checkpoint: {run / 'last.pt'}")
+        # dead output: worse than the input and identical for 3 epochs (e.g. the output saturated in
+        # clamp(0, 1), so no gradient reaches the network; 2026-11-14 corr --single: 7.25 dB from epoch 7)
+        frozen = frozen + 1 if (abs(r["psnr_full"] - last_full) < 1e-3
+                                and r["psnr_full"] < r["psnr_full_in"]) else 0
+        last_full = r["psnr_full"]
+        if frozen >= 2:
+            raise SystemExit(f"STOP: val psnr_full stuck at {last_full:.2f} dB (input {r['psnr_full_in']:.2f}) "
+                             f"for 3 epochs, the network output is dead. Last checkpoint: {run / 'last.pt'}")
     print(f"done. best val PSNR {best:.2f} dB -> {run / 'best.pt'}")
 
 
