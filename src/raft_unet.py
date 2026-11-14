@@ -238,16 +238,25 @@ class CorrGeomNet(CorrSynthNet):
     The rung between "corr" (matching, no geometry) and RAFT + geometry (pretrained iterative
     matching + geometry): if it is much better than "corr", the geometry is the key; if it is
     close to "corr", it is RAFT's matching. Trained from the image loss only, like RAFT in 04.
-    Starts as "static scene" (flow = -baseline, velocity 0, output = input A)."""
+    Starts as "static scene" (flow = -baseline, velocity 0, output = input A).
+
+    Output on the WHOLE image: where the geometry has no source pixel inside A, the uncorrected A
+    is used, so the loss and psnr cover every pixel (as for "corr"). The first run (2026-11-11)
+    computed the loss only on the geometry's valid area: at epoch 7 the flow blew up, the valid
+    area fell to 9 %, best.pt was picked by psnr on those 9 % and no optimizer step was taken
+    after that (non-finite gradients). Hence also the bounded flow (tanh, +-MAX_FLOW px)."""
 
     COUT = 2                                                               # flow A->B
-    FLOW_SCALE = 10.0                                                      # head output * 10 px
+    FLOW_SCALE = 10.0                                                      # head output * 10 px (near 0)
+    MAX_FLOW = 64.0                                                        # |flow A->B| <= 64 px
 
     def forward(self, rs_a, rs_b, T, sync, base):
-        d = self.FLOW_SCALE * self.decode(rs_a, rs_b, T, sync)
+        d = self.MAX_FLOW * torch.tanh(self.FLOW_SCALE / self.MAX_FLOW * self.decode(rs_a, rs_b, T, sync))
         d = d - torch.stack([base, torch.zeros_like(base)], 1).view(-1, 2, 1, 1).to(d)
-        pred, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
-        return pred, {"valid_a": aux["valid"], "loss_mask": aux["valid"], "flow_ab": d,
+        geom, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
+        valid = aux["valid"]
+        pred = valid * geom + (1 - valid) * rs_a                           # no source in A: uncorrected A
+        return pred, {"valid_a": torch.ones_like(valid), "valid_geom": valid, "flow_ab": d,
                       "velocity": aux["velocity"]}
 
 

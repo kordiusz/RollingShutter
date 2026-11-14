@@ -50,8 +50,6 @@ def forward(model, b):
 
 
 def loss_mask(aux, pred):
-    if "loss_mask" in aux:                       # corrgeom: where the geometry's source pixel is inside A
-        return aux["loss_mask"]
     if "valid_b" in aux:
         return torch.maximum(aux["valid_a"], aux["valid_b"])
     return torch.ones_like(pred[:, :1])
@@ -70,6 +68,8 @@ def evaluate(model, loader, dev, names=None):
              "psnr_in": psnr(b["rs_a"], b["gs_a"], m), "ssim_in": ssim(b["rs_a"], b["gs_a"], m),
              "psnr_full": psnr(pred, b["gs_a"], one), "psnr_full_in": psnr(b["rs_a"], b["gs_a"], one),
              "valid": m.flatten(1).mean(1)}
+        if "valid_geom" in aux:                  # corrgeom: share of pixels the geometry corrects
+            r["valid_geom"] = aux["valid_geom"].flatten(1).mean(1)
         if "geom" in aux:
             g = aux["geom"]
             r.update(psnr_geom=psnr(g, b["gs_a"], m), ssim_geom=ssim(g, b["gs_a"], m),
@@ -248,7 +248,7 @@ def main():
 
     for ep in range(start, a.epochs):
         model.train()
-        t0, tot, nb = time.time(), 0.0, 0
+        t0, tot, nb, skipped = time.time(), 0.0, 0, 0
         for b in train_dl:
             b = to_dev(b, dev)
             pred, aux = forward(model, b)
@@ -257,16 +257,20 @@ def main():
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
             torch.nn.utils.clip_grad_norm_(trainable, 1.0)
+            scale = scaler.get_scale()
             scaler.step(opt)
             scaler.update()
             sched.step()
+            skipped += scaler.is_enabled() and scaler.get_scale() < scale   # inf/NaN gradients: step skipped
             tot, nb = tot + loss.item(), nb + 1
         r, _ = evaluate(model, val_dl, dev)
         dt = time.time() - t0
         print(f"ep {ep + 1:3d}/{a.epochs} loss {tot / nb:.4f} | val PSNR {r['psnr']:.2f} dB "
               + (f"(RAFT+geom {r['psnr_geom']:.2f}, " if "psnr_geom" in r else "(")
               + f"input {r['psnr_in']:.2f}) SSIM {r['ssim']:.4f} | full image {r['psnr_full']:.2f} dB"
-              + (f" | from B {100 * r['blend_b']:.1f}%" if "blend_b" in r else "") + f" | {dt:.0f}s", flush=True)
+              + (f" | from B {100 * r['blend_b']:.1f}%" if "blend_b" in r else "")
+              + (f" | geometry on {100 * r['valid_geom']:.1f}%" if "valid_geom" in r else "")
+              + (f" | SKIPPED {skipped}/{nb} steps" if skipped else "") + f" | {dt:.0f}s", flush=True)
         wr.writerow([ep + 1, tot / nb, r["psnr"], r["ssim"], r["psnr_full"], r.get("psnr_geom", ""),
                      r.get("ssim_geom", ""), r["psnr_in"], r["ssim_in"], r.get("blend_b", ""), dt])
         log.flush()
@@ -281,6 +285,9 @@ def main():
                 indent=1))
         if (ep + 1) % 5 == 0 or ep == 0 or ep + 1 == a.epochs:
             save_preview(model, preview, dev, run / f"preview_ep{ep + 1:02d}.png")
+        if skipped > nb // 2:   # the weights no longer change: stop instead of burning GPU time
+            raise SystemExit(f"STOP: {skipped}/{nb} optimizer steps skipped in epoch {ep + 1} "
+                             f"(non-finite gradients), training is stuck. Last checkpoint: {run / 'last.pt'}")
     print(f"done. best val PSNR {best:.2f} dB -> {run / 'best.pt'}")
 
 
