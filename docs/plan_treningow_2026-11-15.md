@@ -11,7 +11,7 @@ Gałąź ma już wszystkie poprawki z `main` z 14.11 (bf16 w sieci `corr`, autom
 
 1. **Który zbiór warstwowy?** Na Drive (`MyDrive/rs_project/datasets/`) są dwa archiwa: `rs_layers.rar` (11.11, 3,05 GB)
    i `rs_layers_2.rar` (13.11, 3,30 GB). Ustalić z Filipem, który jest właściwy, i wpisać go w komórce 1:
-   `LAYERS_NAME = 'rs_layers'` albo `'rs_layers_2'`.
+   `LAYERS_NAME = 'rs_layers_2'` (ustawione domyślnie, 14.11: to właściwa wersja).
 2. **Karta: L4.** A100 się nie opłaca (małe sieci, karta czeka na dane). T4 jest tańszy za epokę, ale `corr` liczy się na nim
    w fp32 (wolno).
 3. Notatnik otwierać **prosto z GitHuba** (Plik → Otwórz notatnik → GitHub → `kordiusz/RollingShutter`, gałąź `filip-layers`,
