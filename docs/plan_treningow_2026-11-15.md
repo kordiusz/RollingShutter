@@ -77,7 +77,8 @@ Co obserwować w logu (pierwsze 1–2 epoki):
 ## 5. Czego nie robimy (decyzje z 14.11)
 
 - `corr_single`, `corrgeom` (notatnik 09): porzucone, sieć `corr` niestabilna. Ablację kamery B niesie para zwykłego U-Netu
-  (200 ep.: 30,94 z B, 26,51 bez B) i etap 1 (MotionNet). Geometrię uzasadnia RAFT + geometria bez uczenia (32,86) kontra
+  (200 ep.: 30,94 z B, 26,51 bez B) i analiza, gdzie B pomaga: zysk w funkcji różnicy chwil odczytu |t_B − t_A|
+  (notatnik 09, bez treningu, wystarczy CPU). Geometrię uzasadnia RAFT + geometria bez uczenia (32,86) kontra
   najlepsza synteza (31,06).
 - `corr200`, testy lr i `corr_w64`: niepotrzebne do tezy.
 - Nowy wariant autoenkodera: trzy sieci syntezy już stoją na ~31 dB, kolejny nic nowego nie powie.
