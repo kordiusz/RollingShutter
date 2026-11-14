@@ -127,6 +127,16 @@ def synth_inputs(rs_a, rs_b, T, sync, rot_k):
                       time_maps(n, h, T, sync, rot_k, rs_a.device)], 1)
 
 
+def synth_amp_dtype(device):
+    """Autocast dtype of the "corr" family: bf16 on GPUs with native bf16 (L4, A100), else None (fp32).
+    Not fp16: these networks have no normalisation layers and their activations exceeded the fp16
+    range at lr 3e-4 (2026-11-14: corr --single NaN at epoch 10, corrgeom flow saturated at epoch 9).
+    bf16 has the fp32 range."""
+    if device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8:
+        return torch.bfloat16
+    return None
+
+
 def down(cin, cout):
     """Stride-2 conv + conv block (halves the resolution)."""
     return nn.Sequential(nn.Conv2d(cin, cout, 3, stride=2, padding=1), nn.LeakyReLU(0.1, inplace=True),
@@ -212,7 +222,8 @@ class CorrSynthNet(nn.Module):
         rs_b = rs_a if self.single else rs_b
         x = synth_inputs(rs_a, rs_b, T, sync, self.rot_k)
         corr = correlation
-        with torch.autocast(device_type=rs_a.device.type, dtype=torch.float16, enabled=rs_a.is_cuda):
+        dtype = synth_amp_dtype(rs_a.device)
+        with torch.autocast(device_type=rs_a.device.type, dtype=dtype or torch.float32, enabled=dtype is not None):
             a2, a4, a8 = self.features(rs_a)
             b2, b4, b8 = self.features(rs_b)
             c8 = corr(a8.float(), b8.float(), self.r8).to(a8.dtype)
@@ -238,16 +249,25 @@ class CorrGeomNet(CorrSynthNet):
     The rung between "corr" (matching, no geometry) and RAFT + geometry (pretrained iterative
     matching + geometry): if it is much better than "corr", the geometry is the key; if it is
     close to "corr", it is RAFT's matching. Trained from the image loss only, like RAFT in 04.
-    Starts as "static scene" (flow = -baseline, velocity 0, output = input A)."""
+    Starts as "static scene" (flow = -baseline, velocity 0, output = input A).
+
+    Output on the WHOLE image: where the geometry has no source pixel inside A, the uncorrected A
+    is used, so the loss and psnr cover every pixel (as for "corr"). The first run (2026-11-11)
+    computed the loss only on the geometry's valid area: at epoch 7 the flow blew up, the valid
+    area fell to 9 %, best.pt was picked by psnr on those 9 % and no optimizer step was taken
+    after that (non-finite gradients). Hence also the bounded flow (tanh, +-MAX_FLOW px)."""
 
     COUT = 2                                                               # flow A->B
-    FLOW_SCALE = 10.0                                                      # head output * 10 px
+    FLOW_SCALE = 10.0                                                      # head output * 10 px (near 0)
+    MAX_FLOW = 64.0                                                        # |flow A->B| <= 64 px
 
     def forward(self, rs_a, rs_b, T, sync, base):
-        d = self.FLOW_SCALE * self.decode(rs_a, rs_b, T, sync)
+        d = self.MAX_FLOW * torch.tanh(self.FLOW_SCALE / self.MAX_FLOW * self.decode(rs_a, rs_b, T, sync))
         d = d - torch.stack([base, torch.zeros_like(base)], 1).view(-1, 2, 1, 1).to(d)
-        pred, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
-        return pred, {"valid_a": aux["valid"], "loss_mask": aux["valid"], "flow_ab": d,
+        geom, aux = correct_from_flow(rs_a, d, T, sync, base, self.rot_k)
+        valid = aux["valid"]
+        pred = valid * geom + (1 - valid) * rs_a                           # no source in A: uncorrected A
+        return pred, {"valid_a": torch.ones_like(valid), "valid_geom": valid, "flow_ab": d,
                       "velocity": aux["velocity"]}
 
 
