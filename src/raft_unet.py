@@ -127,6 +127,16 @@ def synth_inputs(rs_a, rs_b, T, sync, rot_k):
                       time_maps(n, h, T, sync, rot_k, rs_a.device)], 1)
 
 
+def synth_amp_dtype(device):
+    """Autocast dtype of the "corr" family: bf16 on GPUs with native bf16 (L4, A100), else None (fp32).
+    Not fp16: these networks have no normalisation layers and their activations exceeded the fp16
+    range at lr 3e-4 (2026-11-14: corr --single NaN at epoch 10, corrgeom flow saturated at epoch 9).
+    bf16 has the fp32 range."""
+    if device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8:
+        return torch.bfloat16
+    return None
+
+
 def down(cin, cout):
     """Stride-2 conv + conv block (halves the resolution)."""
     return nn.Sequential(nn.Conv2d(cin, cout, 3, stride=2, padding=1), nn.LeakyReLU(0.1, inplace=True),
@@ -212,7 +222,8 @@ class CorrSynthNet(nn.Module):
         rs_b = rs_a if self.single else rs_b
         x = synth_inputs(rs_a, rs_b, T, sync, self.rot_k)
         corr = correlation
-        with torch.autocast(device_type=rs_a.device.type, dtype=torch.float16, enabled=rs_a.is_cuda):
+        dtype = synth_amp_dtype(rs_a.device)
+        with torch.autocast(device_type=rs_a.device.type, dtype=dtype or torch.float32, enabled=dtype is not None):
             a2, a4, a8 = self.features(rs_a)
             b2, b4, b8 = self.features(rs_b)
             c8 = corr(a8.float(), b8.float(), self.r8).to(a8.dtype)
