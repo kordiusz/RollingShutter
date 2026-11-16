@@ -38,7 +38,20 @@ i dodaje drobną poprawkę jasności. Uczenie: 30 epok U-Netu przy zamrożonym R
 - zwykły U-Net (przewiduje przesunięcie obrazu A i poprawkę jasności),
 - syjamski enkoder z warstwą korelacji A↔B i dekoder ze skrótami (`corr`), wynik = A + poprawka.
 
-Wszystkie sieci uczone od zera: bs 16, lr 3·10⁻⁴, harmonogram OneCycle.
+**Ustawienia uczenia.** Wspólne dla wszystkich treningów: AdamW (weight decay 10⁻⁴), harmonogram OneCycle (5% kroków rozgrzewki,
+potem łagodny spadek lr do zera), przycinanie normy gradientu do 1,0, strata L1 obrazu względem wzorca GS, mieszana precyzja.
+Jako wynik bierzemy epokę z najwyższym PSNR na walidacji.
+
+| trening | lr | bs | epoki | uwagi |
+|---|---|---|---|---|
+| dostrajanie RAFT przez geometrię v1 | 2·10⁻⁵ | 8 | 10 | BatchNorm zamrożony, 12 iteracji RAFT |
+| dalsze dostrajanie RAFT z geometrią v2 | 1·10⁻⁵ | 8 | 5 | start z wag z poprzedniego wiersza |
+| U-Net modelu głównego (RAFT zamrożony) | 3·10⁻⁴ | 8 | 30 | RAFT z poprzedniego wiersza |
+| wspólne dostrajanie modelu głównego | U-Net 10⁻⁴, RAFT 10⁻⁵ | 8 | 10 | start z poprzedniego wiersza |
+| sieci bez geometrii (od zera) | 3·10⁻⁴ | 16 | U-Net 30 i 200, `ae` 60, `corr` 80 | bez pretreningu |
+
+RAFT startuje z wag wstępnie wytrenowanych na publicznych zbiorach przepływu optycznego (torchvision). Liczby kroków
+optymalizatora dla każdej metody są w tabeli wyników.
 
 ## 4. Wyniki
 
@@ -112,7 +125,8 @@ lekko maleje z różnicą chwil odczytu: sieć traktuje B jako drugi, inaczej zn
    także uczoną 200 epok. Dostrojenie RAFT przez geometrię dodaje ok. 1,3 dB i nasyca się po kilku epokach.
 2. **Model główny (RAFT + geometria + U-Net) osiąga 35,37 dB (+9,0 dB względem wejścia).** U-Net usuwa szew między obrazami z kamer A i B,
    wygładza krawędzie obiektów i odtwarza brzegi kadru widoczne tylko w kamerze B.
-3. **Sieci bez geometrii zatrzymują się na ok. 31 dB** niezależnie od architektury i liczby parametrów (2,7–10,2 mln). Autoenkoder bez skrótów
+3. **Sieci bez geometrii zatrzymują się na ok. 31 dB** we wszystkich trzech zbadanych architekturach (2,7–10,2 mln wag);
+   zwykły U-Net i `corr` uczyliśmy aż do plateau. Większej sieci nie testowaliśmy. Autoenkoder bez skrótów
    daje wynik gorszy od wejścia (23,27 dB), bo wąskie gardło rozmywa obraz.
 4. **Kamera B jest konieczna**, a z jej informacji korzysta tylko model, który jawnie dzieli przesunięcie przez różnicę chwil odczytu.
 5. Hierarchia metod jest pewna mimo tylko 13 scen walidacyjnych: wszystkie różnice sparowane względem modelu głównego mają CI95 z dala od zera.
@@ -132,7 +146,7 @@ lekko maleje z różnicą chwil odczytu: sieć traktuje B jako drugi, inaczej zn
 ## 8. Dalsze prace
 
 - Zbiór rozszerzony: X4K + zbiór warstwowy (paralaksa, zasłonięcia, większe przesunięcia), te same modele przy tej samej liczbie kroków.
-  Pytanie: kto zyskuje więcej na bogatszych danych, model z geometrią czy synteza wprost. Treningi w toku.
+  Pytanie: kto zyskuje więcej na bogatszych danych, model z geometrią czy synteza wprost. Zbiór i notatnik są gotowe, trening zaplanowany.
 - U-Net korzystający z geometrii v2 (dziś v1).
 - Test na parze prawdziwych kamer (wiatrak) ze stanowiska.
 
