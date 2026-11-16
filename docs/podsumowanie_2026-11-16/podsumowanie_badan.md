@@ -125,7 +125,7 @@ lekko maleje z różnicą chwil odczytu: sieć traktuje B jako drugi, inaczej zn
    także uczoną 200 epok. Dostrojenie RAFT przez geometrię dodaje ok. 1,3 dB i nasyca się po kilku epokach.
 2. **Model główny (RAFT + geometria + U-Net) osiąga 35,37 dB (+9,0 dB względem wejścia).** U-Net usuwa szew między obrazami z kamer A i B,
    wygładza krawędzie obiektów i odtwarza brzegi kadru widoczne tylko w kamerze B.
-3. **Sieci bez geometrii zatrzymują się na ok. 31 dB** we wszystkich trzech zbadanych architekturach (2,7–10,2 mln wag);
+3. **Sieci bez geometrii nie przekraczają ok. 31 dB** w żadnej z trzech zbadanych architektur (2,7–10,2 mln wag);
    zwykły U-Net i `corr` uczyliśmy aż do plateau. Większej sieci nie testowaliśmy. Autoenkoder bez skrótów
    daje wynik gorszy od wejścia (23,27 dB), bo wąskie gardło rozmywa obraz.
 4. **Kamera B jest konieczna**, a z jej informacji korzysta tylko model, który jawnie dzieli przesunięcie przez różnicę chwil odczytu.
