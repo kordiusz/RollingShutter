@@ -1,0 +1,37 @@
+sample,method,psnr_full,ssim_full
+x4k_val_00276_02,RS A - wejscie,14.434,0.4254
+x4k_val_00276_02,autoenkoder bez skrotow (ae),17.043,0.5309
+x4k_val_00276_02,"zwykly U-Net, 200 ep.",17.981,0.5701
+x4k_val_00276_02,enkoder + korelacja (corr),19.921,0.6392
+x4k_val_00276_02,RAFT + geometria (bez U-Netu),28.319,0.8795
+x4k_val_00276_02,model glowny: RAFT + geom. + U-Net,31.884,0.9237
+x4k_val_00273_02,RS A - wejscie,14.938,0.2801
+x4k_val_00273_02,autoenkoder bez skrotow (ae),16.973,0.347
+x4k_val_00273_02,"zwykly U-Net, 200 ep.",18.659,0.5461
+x4k_val_00273_02,enkoder + korelacja (corr),19.474,0.5368
+x4k_val_00273_02,RAFT + geometria (bez U-Netu),26.18,0.8864
+x4k_val_00273_02,model glowny: RAFT + geom. + U-Net,30.681,0.9256
+kolo,RS A - wejscie,22.781,0.932
+kolo,autoenkoder bez skrotow (ae),17.323,0.6312
+kolo,"zwykly U-Net, 200 ep.",28.459,0.9683
+kolo,enkoder + korelacja (corr),25.026,0.9356
+kolo,RAFT + geometria (bez U-Netu),28.872,0.971
+kolo,model glowny: RAFT + geom. + U-Net,30.857,0.9793
+00273_01,RS A - wejscie,13.545,0.2703
+00273_01,autoenkoder bez skrotow (ae),15.322,0.3241
+00273_01,"zwykly U-Net, 200 ep.",19.687,0.5848
+00273_01,enkoder + korelacja (corr),18.653,0.5209
+00273_01,RAFT + geometria (bez U-Netu),26.745,0.9058
+00273_01,model glowny: RAFT + geom. + U-Net,26.933,0.9184
+00839_01,RS A - wejscie,15.69,0.2629
+00839_01,autoenkoder bez skrotow (ae),17.339,0.334
+00839_01,"zwykly U-Net, 200 ep.",18.944,0.4458
+00839_01,enkoder + korelacja (corr),19.88,0.4924
+00839_01,RAFT + geometria (bez U-Netu),21.153,0.742
+00839_01,model glowny: RAFT + geom. + U-Net,26.858,0.889
+00823_02,RS A - wejscie,16.333,0.4312
+00823_02,autoenkoder bez skrotow (ae),18.479,0.3966
+00823_02,"zwykly U-Net, 200 ep.",18.915,0.5872
+00823_02,enkoder + korelacja (corr),20.075,0.6119
+00823_02,RAFT + geometria (bez U-Netu),18.862,0.6078
+00823_02,model glowny: RAFT + geom. + U-Net,20.976,0.7038
