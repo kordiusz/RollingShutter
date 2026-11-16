@@ -177,32 +177,19 @@ Próbki walidacyjne z najsilniejszym RS (najniższy PSNR wejścia):
 |---|---|---|
 | ![torba 2](demo_modeli/modele_00273_01.gif) | ![drzewo](demo_modeli/modele_00839_01.gif) | ![wodospad](demo_modeli/modele_00823_02.gif) |
 
-PSNR [dB] / SSIM całego obrazu:
-
-| próbka | wejście (A) | autoenkoder | zwykły U-Net | `corr` | RAFT + geometria (bez U-Netu) | model główny |
-|---|---|---|---|---|---|---|
-| idąca osoba (`00276_02`) | 14,4 / 0,425 | 17,0 / 0,531 | 18,0 / 0,570 | 19,9 / 0,639 | 28,3 / 0,880 | **31,9 / 0,924** |
-| torba (`00273_02`) | 14,9 / 0,280 | 17,0 / 0,347 | 18,7 / 0,546 | 19,5 / 0,537 | 26,2 / 0,886 | **30,7 / 0,926** |
-| syntetyczne koło | 22,8 / 0,932 | 17,3 / 0,631 | 28,5 / 0,968 | 25,0 / 0,936 | 28,9 / 0,971 | **30,9 / 0,979** |
-| torba, inna próbka (`00273_01`) | 13,5 / 0,270 | 15,3 / 0,324 | 19,7 / 0,585 | 18,7 / 0,521 | 26,7 / 0,906 | **26,9 / 0,918** |
-| kora drzewa (`00839_01`) | 15,7 / 0,263 | 17,3 / 0,334 | 18,9 / 0,446 | 19,9 / 0,492 | 21,2 / 0,742 | **26,9 / 0,889** |
-| wodospad (`00823_02`) | 16,3 / 0,431 | 18,5 / 0,397 | 18,9 / 0,587 | 20,1 / 0,612 | 18,9 / 0,608 | **21,0 / 0,704** |
-
-Liczby dotyczą pojedynczych próbek, więc nie są porównywalne ze średnimi z tabeli głównej (pełne dane: [`demo_modeli/porownanie_modeli.csv`](demo_modeli/porownanie_modeli.csv)).
-Wybrane próbki mają dużo silniejszy RS niż średnia zbioru (wejście 13–16 dB wobec średnio 26,35 dB).
+Wybrane próbki mają dużo silniejszy RS niż średnia zbioru. Liczby PSNR i SSIM każdej próbki są w podpisach GIF-ów.
 
 **Co widać:**
 - **Autoenkoder** rozmywa cały obraz i przekłamuje kolory (koło zmienia barwy). Wszystko przechodzi przez siatkę 16×16, więc szczegóły giną.
-  Przy bardzo silnym RS i tak przewyższa wejście, ale na kole, gdzie wejście ma 22,8 dB, wypada gorzej od niego (17,3 dB).
+  Na kole wypada gorzej niż nieskorygowane wejście.
 - **Zwykły U-Net** daje ostry obraz, bo przesuwa piksele A, ale obiekty prostuje tylko częściowo. Torba jest wyprostowana tylko trochę i rozmazana,
   na piasku pojawiają się fale po przesunięciu, a na kole krzywią się linie tła wokół obiektu.
 - **`corr`** obiekty w ruchu domalowuje: torba jest półprzezroczysta i zdublowana, na kole widać pionowe smugi przy krawędzi.
-- **Model główny** prostuje obiekty i zachowuje ostrość. Najtrudniejszy przypadek to wodospad (21,0 dB): woda nie ma stałych punktów
-  do dopasowania, więc przepływ, a za nim geometria, prawdopodobnie ma niewiele do zmierzenia. Sama geometria daje tam 18,9 dB, mniej niż `corr`,
+- **Model główny** prostuje obiekty i zachowuje ostrość. Najtrudniejszy przypadek to wodospad: woda nie ma stałych punktów
+  do dopasowania, więc przepływ, a za nim geometria, prawdopodobnie ma niewiele do zmierzenia. Sama geometria wypada tam słabiej niż `corr`,
   i dopiero U-Net podnosi wynik na pierwsze miejsce.
-- **SSIM rozdziela metody wyraźniej niż PSNR.** Na scenach rzeczywistych sieci bez geometrii kończą na SSIM 0,32–0,64, a oba warianty z geometrią
-  na 0,74–0,93 (poza wodospadem). Na kole SSIM wejścia jest już wysoki (0,932), bo duże jednolite pola kratki wyglądają lokalnie
-  tak samo nawet po przesunięciu; tam różnice widać lepiej w PSNR.
+- **SSIM rozdziela metody wyraźniej niż PSNR** na scenach rzeczywistych. Na kole SSIM jest wysoki już dla wejścia, bo duże jednolite
+  pola kratki wyglądają lokalnie tak samo nawet po przesunięciu; tam różnice lepiej widać w PSNR.
 
 **Plansza: syntetyczne koło** (koło w kratkę jadące w prawo 2 px/ms, odczyt 20 ms). Kolumny: RS A | RS B | autoenkoder | zwykły U-Net |
 `corr` | RAFT + geometria (bez U-Netu) | model główny | GS. Rzędy: pełny obraz, powiększenie obszaru z najsilniejszym RS (żółta ramka),
@@ -213,7 +200,7 @@ błąd ×4 (czarne = idealnie).
 Na mapie błędu widać różnicę podejść. Wejście ma błąd w postaci ukośnych pasów na całym kole (pochylona kratka).
 W wyniku `corr` pasy prawie się nie zmieniają. U zwykłego U-Netu i w obu wariantach z geometrią zostają tylko cienkie linie
 na krawędziach kratki, a model główny dodatkowo wygładza brzeg koła. Autoenkoder ma błąd w całym kadrze, także w tle.
-Koło porusza się ruchem jednostajnym po prostej, więc to łatwy przypadek dla zwykłego U-Netu (28,5 dB, blisko samej geometrii: 28,9 dB).
-Na prawdziwych scenach z wyraźnym obiektem (osoba, obie próbki z torbą) zwykły U-Net zostaje 7–10 dB za samą geometrią (tabela powyżej).
+Koło porusza się ruchem jednostajnym po prostej, więc to łatwy przypadek dla zwykłego U-Netu: wypada tu prawie tak dobrze jak sama geometria.
+Na prawdziwych scenach z wyraźnym obiektem (osoba, torba) zostaje daleko za nią.
 
 Zestawienie wszystkich próbek w jednym pliku: [`demo_modeli/porownanie_modeli.jpg`](demo_modeli/porownanie_modeli.jpg).
