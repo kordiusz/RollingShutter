@@ -9,6 +9,7 @@ For every sample one block of three rows:
 GIF per sample (modele_<sample>.gif, style of demo.py): RS A -> each network without geometry -> main model,
 PSNR and SSIM of the whole image under each frame (same functions as the training / main table: train_common).
 PSNR / SSIM of every sample and model also go to a CSV next to --out (porownanie_modeli.csv).
+Each sample's block is also saved on its own next to --out: plansza_<sample>.jpg.
 
 The checkpoints are train_unet.py runs. With --runs the newest run of each default name is used
 (same rule as project_paths.find_run / main_table.py):
@@ -163,6 +164,9 @@ def main():
                 top = "PRZED: kamera A (rolling shutter)" if i == 0 else f"PO: {lab}"
                 simple.append(label(gup(im), top, pt or s["name"], a.gif_scale / 2))
         blocks.append(np.vstack([np.hstack(r1), np.hstack(r2), np.hstack(r3)]))
+        sheet = Path(a.out).parent / f"plansza_{s['name']}.jpg"          # the same block, one sample per file
+        cv2.imwrite(str(sheet), blocks[-1], [cv2.IMWRITE_JPEG_QUALITY, 90])
+        print("saved", sheet)
 
         if a.gif_dir:
             from PIL import Image
