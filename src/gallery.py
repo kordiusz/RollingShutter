@@ -114,13 +114,19 @@ def describe(m):
         parts.append(f"baza {m['baseline_px']:.1f} px")
     if "objects" in m:
         objs = m["objects"]
-        parts.append(f"{len(objs)} obiekt(y)")
+        names = [o.get("category", "") for o in objs if o.get("category")]
+        parts.append(f"{len(objs)} obiekt(y)" + (": " + ", ".join(names) if names else ""))
         if objs:
             parts.append("ruch obiektów do " + f"{max(o['speed_px_per_readout'] for o in objs):.0f} px, "
                          + "obrót do " + f"{max(abs(o['spin_rad_per_readout']) for o in objs):.2f} rad")
     w = m.get("cam_w_rad_s", m.get("w_rad_s"))
     if w:
         parts.append(f"drgania {abs(complex(w[0], w[1])):.1f} rad/s, roll {w[2]:+.1f} rad/s")
+    sc = m.get("scene")
+    if sc:
+        parts.append(("wnętrze" if sc.get("indoor") else "plener")
+                     + (", horyzont ze zdjęcia" if sc.get("horizon_src") == "photo" else ", horyzont losowy")
+                     + (f", tło {sc['background']}" if sc.get("background") else ""))
     return " · ".join(parts)
 
 
