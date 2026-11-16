@@ -24,6 +24,7 @@ src/                 kod (generatory, modele, trening, demo); opis techniczny: s
   model.py           klocki sieci: U-Net, warp, warstwa korelacji
   demo.py            demo na próbkach ze zbioru lub parze obrazów (PNG + GIF przed/po)
   demo_real.py       demo na parze zdjęć z prawdziwych kamer (np. wiatrak)
+  demo_models.py     porównanie wizualne: ae, zwykły U-Net, corr, RAFT + geometria, model główny (obraz, powiększenie, błąd, GIF)
   preview.py         podgląd zbioru
   project_paths.py   układ folderów na Google Drive (używany przez notatniki)
 configs/             parametry generatorów (kamery, zakresy ruchu)
