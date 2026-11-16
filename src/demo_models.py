@@ -6,7 +6,9 @@ For every sample one block of three rows:
      the frame on RS A marks the zoomed region),
   2. zoom of the region with the strongest RS distortion (largest |GS - RS A|),
   3. error x4 against GS (black = perfect).
-GIF per sample: RS A -> each model -> GS, every frame = full image + zoom.
+GIF per sample (modele_<sample>.gif, style of demo.py): RS A -> each network without geometry -> main model,
+PSNR and SSIM of the whole image under each frame (same functions as the training / main table: train_common).
+PSNR / SSIM of every sample and model also go to a CSV next to --out (porownanie_modeli.csv).
 
 The checkpoints are train_unet.py runs. With --runs the newest run of each default name is used
 (same rule as project_paths.find_run / main_table.py):
@@ -26,7 +28,15 @@ import cv2
 import numpy as np
 import torch
 
-from demo import label, load_sample, psnr, to_t, to_u8
+from demo import label, load_sample, to_t, to_u8
+from train_common import psnr as psnr_t, ssim as ssim_t
+
+
+def metrics(im, gs):
+    """PSNR [dB] and SSIM of the whole image, uint8 BGR images (as the main table: whole-image mask)."""
+    a, b = to_t(im), to_t(gs)
+    one = torch.ones_like(a[:, :1])
+    return psnr_t(a, b, one).item(), ssim_t(a, b, one).item()
 
 DEFAULT_RUNS = [  # (run name suffix, column label; no Polish letters: cv2.putText cannot draw them)
     ("ae", "autoenkoder bez skrotow (ae)"),
@@ -100,6 +110,7 @@ def main():
     ap.add_argument("--gif-dir", default=None, help="also one GIF per sample in this folder: modele_<sample>.gif, "
                     "same style as demo.py (RS A -> each network without geometry -> main model)")
     ap.add_argument("--gif-scale", type=float, default=2.0, help="GIF frame size = image size x this (as demo.py)")
+    ap.add_argument("--gif-ms", type=int, default=2000, help="time of one GIF frame [ms]")
     ap.add_argument("--gif-zoom", action="store_true",
                     help="also porownanie_<sample>.gif: every frame = full image + zoom, incl. geometry and GS")
     a = ap.parse_args()
@@ -112,7 +123,7 @@ def main():
     assert models, "no checkpoints found"
     sc = a.scale / 2
     up = lambda im: cv2.resize(im, None, fx=a.scale, fy=a.scale, interpolation=cv2.INTER_CUBIC)
-    blocks = []
+    blocks, rows = [], []
     for path in a.samples:
         s = load_sample(path)
         gs = s["gs_a"]
@@ -121,16 +132,17 @@ def main():
         tile = up(s["rs_a"]).shape[:2]
         zoom = lambda im: cv2.resize(im[zy:zy + a.zoom, zx:zx + a.zoom], tile[::-1], interpolation=cv2.INTER_CUBIC)
         err = lambda im: np.clip(np.abs(im.astype(np.float32) - gs.astype(np.float32)) * 4, 0, 255).astype(np.uint8)
-        ptxt = lambda im: f"PSNR {psnr(im, gs):.1f} dB" if gs is not None else None
         blank = np.zeros((*tile, 3), np.uint8)
 
         cols = [("RS A - wejscie", s["rs_a"]), ("RS B - wejscie", s["rs_b"])] + run_models(models, s, dev)
         if gs is not None:
             cols.append(("GS - jak powinno byc", gs))
+        met = {lab: metrics(im, gs) for lab, im in [cols[0]] + cols[2:-1]} if gs is not None else {}
+        ptxt = lambda lab: f"PSNR {met[lab][0]:.1f} dB | SSIM {met[lab][1]:.3f}" if lab in met else None
         print(f"{s['name']}: T {s['T']:.1f} ms, powiekszony obszar ({zx}, {zy})")
-        if gs is not None:
-            for lab, im in [cols[0]] + cols[2:-1]:
-                print(f"  {lab}: {ptxt(im)}")
+        for lab, (p, q) in met.items():
+            print(f"  {lab}: PSNR {p:.2f} dB, SSIM {q:.4f}")
+            rows.append({"sample": s["name"], "method": lab, "psnr_full": round(p, 3), "ssim_full": round(q, 4)})
 
         r1, r2, r3, gif, simple = [], [], [], [], []
         k = a.scale
@@ -141,7 +153,7 @@ def main():
             if i == 0:                                        # mark the zoomed region on the input
                 cv2.rectangle(full, (int(zx * k), int(zy * k)), (int((zx + a.zoom) * k), int((zy + a.zoom) * k)),
                               (0, 255, 255), 2)
-            pt = None if (is_b or is_gs) else ptxt(im)
+            pt = None if (is_b or is_gs) else ptxt(lab)
             r1.append(label(full, lab, pt, sc))
             r2.append(label(zoom(im), f"powiekszenie x{size // a.zoom * a.scale:g}" if i == 0 else None, None, sc))
             r3.append(blank if (is_b or is_gs or gs is None) else label(up(err(im)), "blad x4" if i == 0 else None, None, sc))
@@ -155,7 +167,7 @@ def main():
         if a.gif_dir:
             from PIL import Image
             Path(a.gif_dir).mkdir(parents=True, exist_ok=True)
-            for prefix, fr, dur, on in (("modele", simple, 900, True), ("porownanie", gif, 1100, a.gif_zoom)):
+            for prefix, fr, dur, on in (("modele", simple, a.gif_ms, True), ("porownanie", gif, a.gif_ms, a.gif_zoom)):
                 if not on:
                     continue
                 frames = [Image.fromarray(f[..., ::-1]) for f in fr]
@@ -170,6 +182,14 @@ def main():
         out += [np.pad(b, ((0, 0), (0, w - b.shape[1]), (0, 0))), sep]
     cv2.imwrite(a.out, np.vstack(out[:-1]), [cv2.IMWRITE_JPEG_QUALITY, 92])
     print("saved", a.out)
+    if rows:
+        import csv
+        cp = Path(a.out).with_suffix(".csv")
+        with open(cp, "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+            w.writeheader()
+            w.writerows(rows)
+        print("saved", cp)
 
 
 if __name__ == "__main__":
